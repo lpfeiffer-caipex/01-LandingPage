@@ -1,0 +1,2431 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAIPEX — Immobilienbewertung. Automatisch.</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+
+/* ===========================
+   ROOT & RESET
+   =========================== */
+:root {
+  --base:   #ffffff;
+  --ink:    #1a1916;
+  --teal:   #2f4f4f;
+  --cherry: #960018;
+  --cream:  #f0ece4;
+  --b14: rgba(26,25,22,0.14);
+  --b20: rgba(26,25,22,0.20);
+  --line-soft:   1px solid rgba(26,25,22,0.10);
+  --line-strong: 2px solid #1a1916;
+  --ease: cubic-bezier(0.2, 0, 0, 1.0);
+  --font: 'Figtree', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--base);
+  font-family: var(--font);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===========================
+   SCREENS
+   =========================== */
+.screen {
+  position: fixed;
+  inset: 0;
+  bottom: 92px;
+  background: var(--base);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 32px 64px;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 0.48s var(--ease), opacity 0.28s var(--ease);
+  overflow-y: auto;
+}
+
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+  clip-path: inset(0% 0 0 0);
+}
+
+.screen.exit {
+  clip-path: inset(0 0 100% 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: clip-path 0.38s var(--ease), opacity 0.22s var(--ease);
+}
+
+/* ===========================
+   ANIMATIONS
+   =========================== */
+@keyframes ds-reveal {
+  from { clip-path: inset(100% 0 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes skel-scan {
+  0%   { top: -2px; }
+  100% { top: calc(100% + 2px); }
+}
+
+.reveal   { animation: ds-reveal 0.55s var(--ease) both; }
+.rv1      { animation-delay: 0.04s; }
+.rv2      { animation-delay: 0.14s; }
+.rv3      { animation-delay: 0.24s; }
+.rv4      { animation-delay: 0.34s; }
+.rv5      { animation-delay: 0.44s; }
+
+/* THOST Trust-Glint — blass, blitzt in seltenen Abständen kurz auf */
+@keyframes trust-glint {
+  0%, 9%  { background-position: 175% 0; }
+  21%     { background-position: -75% 0; }
+  100%    { background-position: -75% 0; }
+}
+.trust-glint {
+  display: inline-block;
+  background: linear-gradient(100deg,
+    rgba(26,25,22,0.34) 0%,
+    rgba(26,25,22,0.34) 42%,
+    var(--teal) 50%,
+    rgba(26,25,22,0.34) 58%,
+    rgba(26,25,22,0.34) 100%);
+  background-size: 240% 100%;
+  background-position: -75% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: trust-glint 6.5s var(--ease) infinite;
+  cursor: pointer;
+  transition: -webkit-text-fill-color 0.2s var(--ease);
+}
+.trust-glint:hover {
+  animation: none;
+  background: none;
+  -webkit-text-fill-color: var(--teal);
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+/* ===========================
+   FLOATING DOCK + LEGAL LINE
+   =========================== */
+#dock-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100vw - 24px);
+}
+
+#dock {
+  background: var(--base);
+  border: 1px solid rgba(26,25,22,0.12);
+  border-radius: 10px;
+  padding: 5px;
+  box-shadow: 0 4px 20px rgba(26,25,22,0.08), 0 1px 4px rgba(26,25,22,0.05);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.18s var(--ease);
+  min-width: 48px;
+  user-select: none;
+}
+
+.dock-item svg           { stroke: rgba(26,25,22,0.60); width: 17px; height: 17px; transition: stroke 0.18s var(--ease); }
+.dock-item .d-label      { color: rgba(26,25,22,0.60); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; transition: color 0.18s var(--ease); white-space: nowrap; }
+.dock-item.active        { background: var(--teal); }
+.dock-item.active svg    { stroke: var(--cream); }
+.dock-item.active .d-label { color: var(--cream); }
+.dock-item:not(.active):hover { background: rgba(26,25,22,0.04); }
+
+.dock-sep { width: 1px; height: 30px; background: rgba(26,25,22,0.10); margin: 0 4px; flex-shrink: 0; }
+
+.dock-cta {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 20px;
+  background: var(--teal);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 10px; font-weight: 700;
+  color: var(--cream);
+  text-transform: uppercase; letter-spacing: 0.07em;
+  border: none;
+  transition: opacity 0.18s var(--ease);
+  white-space: nowrap;
+}
+.dock-cta svg { stroke: var(--cream); width: 13px; height: 13px; }
+.dock-cta:hover { opacity: 0.85; }
+.dock-cta.dim { opacity: 0.50; }
+
+#dock-legal {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+#dock-legal a {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(26,25,22,0.38);
+  text-decoration: none;
+  transition: color 0.18s var(--ease);
+  white-space: nowrap;
+}
+#dock-legal a:hover { color: var(--teal); text-decoration: underline; text-underline-offset: 3px; }
+#dock-legal span { color: rgba(26,25,22,0.16); font-size: 9px; user-select: none; }
+
+.privacy-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.privacy-check input {
+  margin-top: 3px;
+  accent-color: var(--teal);
+  flex-shrink: 0;
+}
+.privacy-check span { cursor: pointer; }
+.privacy-check a { color: var(--teal); }
+
+/* ===========================
+   TYPOGRAPHY
+   =========================== */
+.disp {
+  font-size: clamp(52px, 9vw, 104px);
+  font-weight: 900;
+  line-height: 0.92;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.disp.teal   { color: var(--teal); }
+.disp.cherry { color: var(--cherry); }
+
+h2 {
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.body { font-size: 14px; font-weight: 400; line-height: 1.65; color: rgba(26,25,22,0.75); }
+.small { font-size: 12px; font-weight: 400; line-height: 1.6; color: rgba(26,25,22,0.60); }
+
+.label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--ink);
+}
+.label.muted { color: rgba(26,25,22,0.60); }
+
+/* ===========================
+   BUTTONS
+   =========================== */
+.btn {
+  font-family: var(--font); font-weight: 700; font-size: 11px;
+  border: none; padding: 10px 24px; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  transition: opacity 0.14s var(--ease), transform 0.3s var(--ease);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-teal   { border-radius: 999px; background: var(--teal);   color: var(--cream); }
+.btn-cream  { border-radius: 999px; background: var(--cream);  color: var(--ink); }
+.btn-cherry { border-radius: 999px; background: var(--cherry); color: var(--cream); }
+.btn-orange { border-radius: 999px; background: #F15200; color: #fff; }
+.btn:hover { opacity: 0.88; }
+
+/* ===========================
+   KACHELN
+   =========================== */
+.kachel {
+  background: var(--base);
+  border: 1px solid var(--b20);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s var(--ease);
+}
+.kachel.gut      { border-bottom: 3px solid var(--teal);   box-shadow: 0 4px 16px rgba(47,79,79,0.10); }
+.kachel.neutral  { border-bottom: 3px solid rgba(26,25,22,0.20); box-shadow: 0 4px 16px rgba(200,190,175,0.40); }
+
+.kachel::before {
+  content: '';
+  position: absolute; left: -1px; bottom: 0;
+  width: 3px; height: 0;
+  background: var(--teal);
+  transition: height 0.3s var(--ease);
+}
+.kachel:hover::before { height: 100%; }
+
+/* ===========================
+   FOTO HOVER
+   =========================== */
+.foto {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--b20);
+  flex-shrink: 0;
+}
+.foto::before {
+  content: '';
+  position: absolute; left: 0; bottom: 0;
+  width: 3px; height: 0;
+  transition: height 0.3s var(--ease);
+  z-index: 2;
+}
+.foto:hover::before { height: 100%; }
+.foto-teal   { border-bottom: 3px solid var(--teal); box-shadow: 0 4px 16px rgba(47,79,79,0.10); }
+.foto-teal::before   { background: var(--teal); }
+.foto-cherry { border-bottom: 3px solid var(--cherry); box-shadow: 0 4px 16px rgba(150,0,24,0.10); }
+.foto-cherry::before { background: var(--cherry); }
+
+/* ===========================
+   BADGE
+   =========================== */
+.badge { border-radius: 10px; width: 20px; height: 8px; display: inline-block; flex-shrink: 0; }
+.badge-teal  { background: var(--teal); }
+.badge-cream { background: var(--cream); border: 1px solid var(--b20); }
+
+/* ===========================
+   FIELDS
+   =========================== */
+.field {
+  font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--ink);
+  border: none; border-bottom: 1px solid rgba(26,25,22,0.15);
+  background: transparent; caret-color: var(--teal);
+  width: 100%; padding: 8px 0; outline: none;
+  transition: border-bottom 0.14s var(--ease);
+}
+.field::placeholder { color: rgba(26,25,22,0.35); font-weight: 400; }
+.field:hover, .field:focus { border-bottom: 1.5px solid var(--teal); }
+textarea.field { resize: none; }
+
+/* ===========================
+   LAYOUT
+   =========================== */
+.g3  { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; width: 100%; max-width: 960px; }
+.g2  { display: grid; grid-template-columns: repeat(2,1fr); gap: 56px; width: 100%; max-width: 960px; align-items: start; }
+.stk { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.mw  { max-width: 600px; width: 100%; }
+.mwl { max-width: 960px; width: 100%; }
+
+/* ===========================
+   FAQ — GEMINI CHAT STYLE
+   =========================== */
+.faq-chip {
+  background: #fff;
+  border: 1.5px solid rgba(26,25,22,0.13);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.15s;
+  white-space: nowrap;
+}
+.faq-chip:hover {
+  border-color: var(--teal);
+  background: rgba(47,79,79,0.05);
+  transform: translateY(-1px);
+}
+
+.faq-bubble-q {
+  align-self: flex-end;
+  background: var(--teal);
+  color: #fff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 500;
+  max-width: 600px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.faq-bubble-a {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 4px 0 20px;
+  font-size: 15px;
+  color: var(--ink);
+  max-width: 720px;
+  line-height: 1.7;
+  margin-bottom: 0;
+  box-shadow: none;
+}
+.faq-bubble-a .faq-mail-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 14px;
+  background: var(--cherry); color: #fff;
+  border: none; border-radius: 999px;
+  padding: 9px 18px; font-family: inherit;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+  transition: opacity 0.18s;
+}
+.faq-bubble-a .faq-mail-btn:hover { opacity: 0.85; }
+
+.faq-msg-wrap {
+  width: 100%; max-width: 760px;
+  display: flex; flex-direction: column;
+}
+
+/* ===========================
+   WORKFLOW / TECHNOLOGIE
+   =========================== */
+/* Workflow / Technologie — horizontaler Stepper */
+.wf-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  position: relative;
+}
+.wf-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  position: relative;
+}
+/* connector line between items */
+.wf-nav-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: rgba(26,25,22,0.12);
+  z-index: 0;
+  transition: background 0.4s var(--ease);
+}
+.wf-nav-item.passed::after { background: var(--teal); }
+.wf-num-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: rgba(26,25,22,0.10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: rgba(26,25,22,0.35);
+  position: relative;
+  z-index: 1;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease), transform 0.25s var(--ease);
+  flex-shrink: 0;
+}
+.wf-nav-item.active .wf-num-box {
+  background: var(--teal);
+  color: #fff;
+  transform: scale(1.12);
+}
+.wf-nav-item.passed .wf-num-box {
+  background: var(--teal);
+  color: #fff;
+}
+.wf-nav-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(26,25,22,0.35);
+  text-align: center;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  transition: color 0.25s var(--ease);
+  white-space: normal;
+  max-width: 68px;
+}
+.wf-nav-item.active .wf-nav-label { color: var(--ink); }
+.wf-nav-item.passed .wf-nav-label { color: rgba(26,25,22,0.55); }
+
+/* Media */
+.wf-media-frame {
+  flex: 1;
+  min-height: clamp(240px, 38vh, 360px);
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(26,25,22,0.06);
+  position: relative;
+}
+.wf-media-frame img,
+.wf-media-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  opacity: 0;
+  transition: opacity 0.35s var(--ease);
+}
+.wf-media-frame .wf-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.35s var(--ease);
+}
+.wf-media-frame .wf-placeholder svg { opacity: 0.22; }
+.wf-media-frame .wf-placeholder span {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(26,25,22,0.30);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.wf-media-frame img.visible,
+.wf-media-frame video.visible,
+.wf-media-frame .wf-placeholder.visible { opacity: 1; }
+.wf-caption {
+  font-size: 13px;
+  color: rgba(26,25,22,0.62);
+  line-height: 1.45;
+  flex-shrink: 0;
+  min-height: 20px;
+  transition: opacity 0.2s var(--ease);
+}
+#screen-produkt {
+  padding: 20px 48px 28px;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+.wf-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1120px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.wf-head { flex-shrink: 0; }
+.wf-title { font-size: clamp(20px, 2.4vw, 34px); font-weight: 900; line-height: 1.12; letter-spacing: -0.01em; margin: 0; }
+.wf-progress { height: 3px; background: rgba(26,25,22,0.10); border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+.wf-progress-fill { height: 100%; width: 16.666%; background: var(--teal); transition: width 0.55s var(--ease); }
+.wf-body { display: flex; gap: 40px; flex: 1 1 auto; min-height: 0; align-items: stretch; }
+.wf-media-col { flex: 1.12; min-width: 0; min-height: 0; display: flex; align-self: stretch; }
+.wf-copy-col { flex: 0.88; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-width: 0; padding-right: clamp(0px, 2vw, 12px); transition: color 0.4s var(--ease); }
+.wf-copy-col.finale .wf-step-title { color: var(--teal); }
+.wf-copy-col.finale .wf-caption { color: rgba(47,79,79,0.78); }
+.wf-step-title { font-size: clamp(18px, 2vw, 28px); font-weight: 900; line-height: 1.18; letter-spacing: -0.01em; transition: opacity 0.2s var(--ease), color 0.4s var(--ease); }
+.wf-scanline { position: absolute; left: 0; right: 0; top: 0; height: 34px; background: linear-gradient(rgba(241,82,0,0.32), rgba(241,82,0,0)); border-top: 2.5px solid #F15200; opacity: 0; pointer-events: none; z-index: 4; }
+.wf-scanline.run { animation: wf-scan 2s var(--ease) forwards; }
+@keyframes wf-scan { 0%{top:-34px;opacity:1} 90%{opacity:1} 100%{top:100%;opacity:0} }
+.wf-media-frame.finale { background: var(--teal); border: 1px solid rgba(240,236,228,0.18); }
+.wf-ph-inner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; padding: 20px; }
+.wf-ph-inner svg { width: min(220px, 72%); height: auto; }
+.wf-ph-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(26,25,22,0.32); }
+.wf-checklist { display: flex; flex-direction: column; gap: 8px; align-self: stretch; max-width: 240px; margin-top: 4px; }
+.wf-check { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: rgba(26,25,22,0.55); opacity: 0; transform: translateX(-6px); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
+.wf-check.on { opacity: 1; transform: translateX(0); }
+.wf-check i { width: 14px; height: 14px; stroke: var(--teal); flex-shrink: 0; }
+.wf-analyze svg { width: min(280px, 88%); }
+.wf-analyze .wf-lbl-line { stroke-dasharray: 80; stroke-dashoffset: 80; transition: stroke-dashoffset 0.5s var(--ease); }
+.wf-analyze .wf-lbl-dot { opacity: 0; transform: scale(0); transform-origin: center; transform-box: fill-box; transition: opacity 0.3s var(--ease), transform 0.35s var(--ease); }
+.wf-analyze .wf-lbl-txt { opacity: 0; transition: opacity 0.4s var(--ease) 0.12s; }
+.wf-analyze .wf-lbl.on .wf-lbl-line { stroke-dashoffset: 0; }
+.wf-analyze .wf-lbl.on .wf-lbl-dot { opacity: 1; transform: scale(1); transition-delay: 0.3s; }
+.wf-analyze .wf-lbl.on .wf-lbl-txt { opacity: 1; }
+.wf-export-doc { background: var(--base); border: 1px solid var(--b20); border-bottom: 3px solid var(--teal); border-radius: 8px; padding: 18px 22px; display: flex; flex-direction: column; gap: 8px; align-self: stretch; max-width: 260px; box-shadow: 0 6px 20px rgba(47,79,79,0.10); opacity: 0; transform: translateY(10px) scale(0.96); transition: opacity 0.45s var(--ease), transform 0.45s var(--ease); }
+.wf-export-doc.on { opacity: 1; transform: translateY(0) scale(1); }
+.wf-export-doc strong { font-size: 14px; font-weight: 800; }
+.wf-export-doc span { font-size: 12px; color: rgba(26,25,22,0.58); line-height: 1.45; }
+.wf-finale { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 22px 26px; }
+.wf-finale-card { background: var(--base); border: 1px solid var(--b20); border-bottom: 3px solid #F15200; border-radius: 7px; padding: 13px 16px; font-size: clamp(12px, 1.1vw, 14px); font-weight: 600; line-height: 1.35; text-align: left; color: var(--ink); box-shadow: 0 4px 16px rgba(0,0,0,0.10); opacity: 0; transform: translateY(10px); transition: opacity 0.4s var(--ease), transform 0.4s var(--ease); }
+.wf-finale-card.on { opacity: 1; transform: translateY(0); }
+.wf-finale-card em { font-style: normal; color: #F15200; font-weight: 800; }
+.wf-pip {
+  position: fixed;
+  right: clamp(18px, 2.4vw, 32px);
+  bottom: calc(92px + 12px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+.wf-pip-frame {
+  position: relative;
+  width: clamp(108px, 10.5vw, 142px);
+  aspect-ratio: 9 / 14;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0a0a0a;
+  border: 2px solid var(--teal);
+  box-shadow: 0 12px 40px rgba(47,79,79,0.28), 0 0 0 1px rgba(240,236,228,0.12);
+  transform: translateY(0);
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+.wf-pip-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(241,82,0,0.14) 0%, transparent 38%, transparent 62%, rgba(47,79,79,0.35) 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+.wf-pip-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 12%;
+  display: block;
+}
+.wf-pip-play {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(47,79,79,0.92);
+  border: 2px solid rgba(240,236,228,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  animation: wf-pip-pulse 2.4s var(--ease) infinite;
+}
+.wf-pip-play i { width: 14px; height: 14px; stroke: var(--cream); fill: var(--cream); margin-left: 2px; }
+@keyframes wf-pip-pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 0 rgba(241,82,0,0.45); }
+  50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 6px rgba(241,82,0,0); }
+}
+.wf-pip-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cream);
+  background: rgba(241,82,0,0.92);
+  padding: 3px 7px;
+  border-radius: 999px;
+}
+.wf-pip-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(26,25,22,0.48);
+  text-align: right;
+  max-width: 142px;
+  line-height: 1.3;
+}
+
+/* ===========================
+   PREISE
+   =========================== */
+.pkachel {
+  background: var(--base);
+  border: 1px solid var(--b20);
+  border-bottom: 3px solid var(--teal);
+  padding: 28px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+  box-shadow: 0 4px 16px rgba(200,190,175,0.40);
+}
+.pkachel.hi {
+  border-color: var(--teal);
+  box-shadow: 0 4px 24px rgba(47,79,79,0.15);
+}
+.pflist { border-bottom: 1px solid rgba(26,25,22,0.10); }
+.pf {
+  display: flex; align-items: center; gap: 13px;
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  line-height: 1.3; padding: 11px 0;
+  border-top: 1px solid rgba(26,25,22,0.10);
+}
+.pf svg { display: none; }
+.pf::before {
+  content: ''; flex-shrink: 0;
+  width: 0; height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 9px solid var(--teal);
+}
+
+/* ===========================
+   PREISE — HAUS-VIZ
+   =========================== */
+.pcard { position: relative; }
+.price-viz {
+  height: 78px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+.price-viz svg { height: 100%; width: auto; display: block; overflow: visible; }
+.price-viz .ph-house { fill: rgba(26,25,22,0.045); stroke: #1a1916; stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.price-viz .ph-probe { fill: none; stroke: rgba(26,25,22,0.50); stroke-width: 1.4; stroke-linejoin: round; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.price-viz .ph-faint { fill: none; stroke: rgba(26,25,22,0.55); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.price-viz .ph-dot { fill: var(--teal); opacity: 0; transition: opacity 0.45s var(--ease); }
+.pcard:hover .price-viz .ph-dot { opacity: 1; transition-delay: 0.75s; }
+.price-viz .ph-scanline {
+  position: absolute; left: 0; right: 0; top: 0; height: 11px;
+  background: linear-gradient(rgba(47,79,79,0.20), rgba(47,79,79,0));
+  border-top: 1.5px solid var(--teal);
+  opacity: 0; pointer-events: none;
+}
+.pcard:hover .price-viz .ph-scanline { animation: ph-scan 1.7s var(--ease) forwards; }
+@keyframes ph-scan {
+  0%   { opacity: 1; top: 0; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; top: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iv-lbl-line { stroke-dashoffset:0; transition:none; }
+  .iv-lbl-dot, .iv-lbl-info, .iv-lbl-mass, .iv-benefit { opacity:1; transform:none; transition:none; }
+  .iv-lbl.on.iv-flash, .iv-lbl.on.iv-flash .iv-lbl-dot { animation:none; filter:none; }
+  .iv-benefit.on:hover { transform:none; box-shadow:0 4px 16px rgba(47,79,79,0.08); }
+  .wf-scanline.run { animation:none; opacity:0; }
+  .wf-placeholder, .wf-placeholder.visible { opacity:1; }
+  .wf-check, .wf-check.on, .wf-export-doc, .wf-export-doc.on, .wf-finale-card, .wf-finale-card.on { opacity:1; transform:none; transition:none; }
+  .wf-analyze .wf-lbl-line { stroke-dashoffset:0; }
+  .wf-analyze .wf-lbl-dot, .wf-analyze .wf-lbl-txt { opacity:1; transform:none; }
+  .wf-pip-play { animation:none; }
+}
+
+/* ===========================
+   PRINZIP — IST vs MIT CAIPEX
+   =========================== */
+.prinzip-wrap { display:flex; width:100%; max-width:1120px; height:100%; align-items:stretch; gap:0; margin:0 auto; }
+.prinzip-ist { flex:0 0 34%; display:flex; flex-direction:column; justify-content:center; gap:16px; padding-right:40px; }
+.prinzip-ist svg { opacity:0.85; }
+.prinzip-div { width:1px; background:rgba(26,25,22,0.12); position:relative; flex-shrink:0; overflow:hidden; }
+.prinzip-scan { position:absolute; left:-2px; right:-2px; top:-44px; height:44px; background:linear-gradient(rgba(241,82,0,0.55), rgba(241,82,0,0)); border-bottom:1.5px solid #F15200; opacity:0; }
+.screen.active .prinzip-scan { animation: prinzip-scan 2.6s var(--ease) 0.35s; }
+@keyframes prinzip-scan { 0%{opacity:0; top:-44px;} 12%{opacity:1;} 88%{opacity:1;} 100%{opacity:0; top:100%;} }
+.prinzip-caipex { flex:1; display:flex; flex-direction:column; justify-content:center; gap:14px; padding-left:44px; min-width:0; }
+.p-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+.hint { display:flex; align-items:center; gap:11px; padding:10px 14px; border:1px solid rgba(26,25,22,0.12); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(26,25,22,0.04); }
+.hint .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.hint .htxt { font-size:14px; font-weight:600; color:var(--ink); }
+.hint .hwhen { margin-left:auto; font-size:12px; font-weight:700; color:rgba(26,25,22,0.55); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* ===========================
+   FÜR WEN — KONSTELLATION
+   =========================== */
+#screen-fuerwen { padding: 28px 56px 36px; justify-content: center; align-items: center; }
+.fw-stage { display: flex; flex-direction: column; gap: 26px; width: 100%; max-width: 1180px; margin: 0 auto; justify-content: center; }
+.fw-head { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+.fw-headline { font-size: clamp(28px, 4vw, 44px); font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; color: var(--ink); margin: 0; }
+.fw-headline .fw-accent { color: #F15200; }
+.fw-constellation { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.fw-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; width: 100%; align-items: stretch; }
+.fw-card {
+  appearance: none; border: 1px solid var(--b14); background: var(--base);
+  padding: 12px 10px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer; text-align: center; font-family: inherit; color: var(--ink);
+  border-bottom: 3px solid transparent;
+  opacity: 0; transform: translateY(14px);
+  transition: border-color 0.22s var(--ease), box-shadow 0.22s var(--ease), transform 0.22s var(--ease), opacity 0.22s var(--ease);
+}
+.fw-card.fw-in { opacity: 1; transform: translateY(0); }
+.fw-card:hover { box-shadow: 0 4px 16px rgba(47,79,79,0.08); }
+.fw-card.active { border-bottom-color: var(--teal); box-shadow: 0 8px 24px rgba(47,79,79,0.14); transform: translateY(-3px); }
+.fw-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.fw-house { position: relative; width: 100%; overflow: visible; }
+.fw-house svg { width: 100%; height: auto; display: block; overflow: visible; }
+.fw-scan { position: absolute; left: 0; right: 0; top: 0; height: 14px; background: linear-gradient(rgba(241,82,0,0.22), rgba(241,82,0,0)); border-top: 1.6px solid #F15200; opacity: 0; pointer-events: none; z-index: 2; }
+.fw-scan.run { animation: fw-scan 1.45s var(--ease) forwards; }
+@keyframes fw-scan { 0% { opacity: 1; top: 0; } 85% { opacity: 1; } 100% { opacity: 0; top: 100%; } }
+.fw-lbl { opacity: 0; transition: opacity 0.35s var(--ease); }
+.fw-lbl.on { opacity: 1; }
+.fw-lbl-name { font-family: var(--font); font-size: 7px; font-weight: 700; fill: var(--ink); }
+.fw-lbl-state { font-family: var(--font); font-size: 6px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.fw-lbl-state.bad { fill: var(--cherry); }
+.fw-lbl-state.good { fill: var(--teal); }
+.fw-lbl-state.mid { fill: rgba(26,25,22,0.55); }
+.fw-role { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(26,25,22,0.45); }
+.fw-type { font-size: 14px; font-weight: 900; color: var(--ink); line-height: 1.2; }
+.fw-cap { font-size: 12px; line-height: 1.45; color: rgba(26,25,22,0.72); max-width: 18em; }
+.fw-hub { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; padding-top: 2px; }
+.fw-hub-art { width: min(92%, 920px); height: 28px; display: block; }
+.fw-hub-art line { stroke: rgba(26,25,22,0.13); stroke-width: 1; }
+.fw-hub-art line.fw-hub-core { stroke: rgba(241,82,0,0.35); stroke-width: 1.2; }
+.fw-hub-mark { font-size: clamp(18px, 2.2vw, 26px); font-weight: 900; letter-spacing: -0.02em; color: var(--teal); line-height: 1; }
+.fw-hub-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F15200; }
+.fw-close { background: var(--cream); border: 1px solid var(--b14); padding: 16px 22px; text-align: center; max-width: 900px; margin: 0 auto; width: 100%; }
+.fw-close p { font-size: clamp(15px, 1.45vw, 18px); line-height: 1.45; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
+.fw-close .fw-accent { color: #F15200; font-weight: 700; }
+
+@media (max-width: 1100px) {
+  .fw-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fw-card:nth-child(4) { grid-column: 1 / 2; }
+  .fw-card:nth-child(5) { grid-column: 2 / 4; max-width: 420px; justify-self: center; width: 100%; }
+}
+
+/* ===========================
+   IHR VORTEIL — BEWERTUNG
+   =========================== */
+#screen-prinzip { padding:32px 56px 48px; justify-content:center; align-items:center; }
+.iv-wrap { display:flex; align-items:stretch; justify-content:center; gap:40px; width:100%; height:100%; max-width:1140px; margin:0 auto; }
+.iv-left { flex:0 0 24%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:var(--base); transition:flex-basis .7s var(--ease), opacity .5s var(--ease); }
+.iv-wrap.done .iv-left { flex:0 0 18%; opacity:0.82; }
+.iv-istlabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:rgba(26,25,22,0.88); }
+.iv-left .iv-house { max-width:240px; width:100%; }
+.iv-house { position:relative; width:100%; }
+.iv-house svg { width:100%; height:auto; display:block; overflow:visible; }
+.iv-scanline { position:absolute; left:-4%; right:-4%; top:0; height:30px; background:linear-gradient(rgba(241,82,0,0.30), rgba(241,82,0,0)); border-top:2.5px solid #F15200; opacity:0; pointer-events:none; }
+.iv-right { flex:1 1 0; min-width:0; align-self:stretch; position:relative; display:flex; align-items:center; justify-content:center; text-align:center; background:var(--base); transition:background .55s var(--ease); }
+.iv-wrap.done .iv-right { background:var(--teal); padding:20px 16px 24px; }
+.iv-intro { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:20px; max-width:460px; width:100%; transition:opacity .4s var(--ease); }
+.iv-problem-title { font-size:clamp(18px,2vw,24px); font-weight:800; line-height:1.2; letter-spacing:-0.01em; color:var(--ink); text-transform:none; }
+.iv-wrap.done .iv-intro { opacity:0; pointer-events:none; }
+.iv-text { font-size:clamp(16px,1.6vw,20px); font-weight:400; line-height:1.65; color:rgba(26,25,22,0.78); text-align:center; margin:0; }
+.iv-result { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:14px; width:100%; padding:4px 8px 20px; opacity:0; pointer-events:none; transition:opacity .5s var(--ease); overflow-y:auto; }
+.iv-wrap.done .iv-result { opacity:1; pointer-events:auto; min-height:100%; box-sizing:border-box; }
+.iv-hero { display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; max-width:580px; }
+.iv-headline { font-size:clamp(20px,2.4vw,30px); font-weight:900; line-height:1.18; letter-spacing:-0.01em; color:var(--ink); margin:0; text-align:center; transition:color .45s var(--ease); }
+.iv-caipex-mark { color:#F15200; }
+.iv-wrap.done .iv-headline { color:var(--cream); }
+.iv-wrap.done .iv-headline .iv-caipex-mark { color:#ffb07a; }
+.iv-caipex { width:100%; max-width:660px; margin-top:4px; }
+.iv-wrap.done .iv-caipex [stroke="#1a1916"] { stroke:rgba(240,236,228,0.82); }
+.iv-wrap.done .iv-caipex [stroke="rgba(26,25,22,0.4)"] { stroke:rgba(240,236,228,0.45); }
+.iv-wrap.done .iv-caipex [stroke="rgba(26,25,22,0.5)"] { stroke:rgba(240,236,228,0.55); }
+.iv-wrap.done .iv-caipex [stroke="rgba(26,25,22,0.7)"] { stroke:rgba(240,236,228,0.72); }
+.iv-wrap.done .iv-caipex [fill="rgba(26,25,22,0.05)"] { fill:rgba(240,236,228,0.10); }
+.iv-wrap.done .iv-caipex [fill="rgba(26,25,22,0.035)"] { fill:rgba(240,236,228,0.08); }
+.iv-wrap.done .iv-lbl-info { fill:var(--cream); }
+.iv-wrap.done .iv-lbl-mass { fill:#ffb07a; }
+.iv-wrap.done .iv-lbl-line[stroke="#2f4f4f"] { stroke:rgba(240,236,228,0.55); }
+.iv-wrap.done .iv-lbl-dot[fill="#2f4f4f"] { fill:rgba(240,236,228,0.75); }
+.iv-lbl { opacity:1; }
+.iv-lbl-line { stroke-dasharray:90; stroke-dashoffset:90; transition:stroke-dashoffset .55s var(--ease); }
+.iv-lbl-dot { opacity:0; transform:scale(0); transform-origin:center; transform-box:fill-box; transition:opacity .3s var(--ease), transform .35s var(--ease); }
+.iv-lbl-info { opacity:0; transition:opacity .4s var(--ease) .15s; }
+.iv-lbl-mass { opacity:0; transition:opacity .45s var(--ease) .45s; }
+.iv-lbl.on .iv-lbl-line { stroke-dashoffset:0; }
+.iv-lbl.on .iv-lbl-dot { opacity:1; transform:scale(1); transition-delay:.35s; }
+.iv-lbl.on .iv-lbl-info { opacity:1; }
+.iv-lbl.on .iv-lbl-mass { opacity:1; }
+@keyframes iv-lbl-glint {
+  0%, 100% { opacity:1; filter:brightness(1); }
+  18% { opacity:1; filter:brightness(1.28); }
+  32% { opacity:0.78; filter:brightness(1.05); }
+  48% { opacity:1; filter:brightness(1.22); }
+  62% { opacity:1; filter:brightness(1); }
+}
+.iv-lbl.on.iv-flash { animation:iv-lbl-glint 1.75s var(--ease); }
+.iv-lbl.on.iv-flash .iv-lbl-dot { animation:iv-dot-glint 1.75s var(--ease); }
+@keyframes iv-dot-glint {
+  0%, 100% { transform:scale(1); }
+  22% { transform:scale(1.45); }
+  44% { transform:scale(1); }
+  58% { transform:scale(1.25); }
+}
+.iv-benefits { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; width:100%; max-width:660px; margin-top:6px; }
+.iv-wrap.done .iv-benefits { flex:0 0 auto; margin-top:auto; margin-bottom:auto; padding:clamp(8px,1.5vh,16px) 0; min-height:0; }
+.iv-benefit { background:var(--base); border:1px solid var(--b20); border-bottom:3px solid var(--teal); padding:18px 20px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:clamp(14px,1.25vw,17px); font-weight:400; line-height:1.38; color:var(--ink); box-shadow:0 4px 16px rgba(47,79,79,0.08); opacity:0; transform:translateY(10px); transition:opacity .45s var(--ease), transform .45s var(--ease), box-shadow .22s var(--ease); }
+.iv-benefit.on { opacity:1; transform:translateY(0); }
+.iv-benefit.on:hover { transform:translateY(-4px); box-shadow:0 8px 24px rgba(47,79,79,0.14); }
+.iv-replay-left { opacity:0; pointer-events:none; margin-top:14px; transition:opacity .4s var(--ease); }
+.iv-wrap.done .iv-replay-left { opacity:1; pointer-events:auto; }
+.iv-replay { background:none; border:none; color:rgba(26,25,22,0.45); font-family:var(--font); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.iv-replay:hover { color:#F15200; }
+.iv-replay svg { width:12px; height:12px; }
+@keyframes iv-scan { 0%{top:-30px; opacity:1;} 90%{opacity:1;} 100%{top:100%; opacity:0;} }
+
+/* ===========================
+   STAT ROW
+   =========================== */
+.stat { display: flex; flex-direction: column; gap: 3px; }
+.stat-n { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat-n.teal { color: var(--teal); }
+
+/* ===========================
+   STEP INDICATOR
+   =========================== */
+.step-num {
+  width: 24px; height: 24px; border-radius: 0;
+  background: var(--teal); color: var(--cream);
+  font-size: 10px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+/* ===========================
+   FOCUS & A11Y
+   =========================== */
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* ===========================
+   HOUSE VIZ
+   =========================== */
+.lbl { opacity: 0; transition: opacity .45s var(--ease); }
+.lbl.on { opacity: 1; }
+.lbl-name { font-family: var(--font); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.lbl-state { font-family: var(--font); font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+.scan { opacity: 0; }
+.scan.run { animation: house-scan 3.74s var(--ease) forwards; }
+@keyframes house-scan { 0%{transform:translateY(0);opacity:1} 90%{opacity:1} 100%{transform:translateY(206px);opacity:0} }
+
+/* ===========================
+   TEAM SCREEN — scrollable, no padding
+   =========================== */
+#screen-team {
+  padding: 0;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+#screen-team-inner {
+  width: 100%;
+  overflow-y: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===========================
+   REDUCED MOTION
+   =========================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .fw-card { opacity: 1; transform: none; }
+  .fw-card.active .fw-lbl { opacity: 1; }
+}
+
+/* ===========================
+   RESPONSIVE
+   =========================== */
+@media (max-width: 800px) {
+  .screen { padding: 32px 24px; }
+  .g3 { grid-template-columns: 1fr; }
+  .g2 { grid-template-columns: 1fr; gap: 32px; }
+  .d-label { display: none; }
+  .dock-item { min-width: 40px; padding: 8px 9px; }
+  .prinzip-wrap { flex-direction:column; height:auto; gap:24px; }
+  .prinzip-ist, .prinzip-caipex { flex:none; padding:0; }
+  .prinzip-div { display:none; }
+  .fw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .fw-card:nth-child(4), .fw-card:nth-child(5) { grid-column: auto; max-width: none; }
+  #screen-fuerwen { padding: 24px 24px 32px; }
+  .fw-hub-art { height: 20px; }
+  .fw-close { padding: 14px 16px; }
+  #screen-prinzip { padding:32px 24px 40px; }
+  .iv-wrap { flex-direction:column; height:auto; gap:32px; }
+  .iv-left, .iv-wrap.done .iv-left { flex:none !important; width:100%; max-width:240px; opacity:1; }
+  .iv-right { align-self:stretch; min-height:320px; }
+  .iv-wrap.done .iv-intro { display:none; }
+  .iv-benefits { grid-template-columns:1fr; }
+  .iv-replay-left { margin-top:10px; }
+  #screen-produkt { padding: 22px 20px 28px; }
+  .wf-body { flex-direction: column; gap: 18px; }
+  .wf-media-frame { min-height: 210px; }
+  .wf-nav-label { font-size: 9px; max-width: 48px; white-space: normal; }
+  .wf-pip { right: 14px; bottom: calc(92px + 8px); }
+  .wf-pip-frame { width: 88px; border-radius: 12px; }
+  .wf-pip-label { font-size: 9px; max-width: 88px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================
+     SCREEN 1 — HOME
+     ================================================ -->
+<section class="screen active" id="screen-home">
+  <div style="display:flex; align-items:stretch; gap:48px; width:100%; height:100%;">
+
+    <!-- LEFT — Copy -->
+    <div style="flex:0 0 360px; display:flex; flex-direction:column; gap:20px; align-items:center; text-align:center; justify-content:center; padding:40px 0;">
+
+      <div style="overflow:hidden; display:flex; flex-direction:column; gap:0; width:100%;">
+        <div class="reveal rv1" style="font-size:clamp(88px,13vw,160px); font-weight:900; line-height:0.88; color:var(--teal); letter-spacing:-0.02em;">CAIPEX</div>
+        <div class="reveal rv1" style="font-size:clamp(26px,3.8vw,52px); font-weight:900; color:var(--ink); letter-spacing:-0.01em; margin-top:8px;">Technische Gebäudeanalyse</div>
+      </div>
+
+      <div class="reveal rv3">
+        <div style="font-size:clamp(14px,1.6vw,18px); font-weight:700; color:var(--ink);">Über 1.000 Bewertungen von Hand durchgeführt.<br>Mit <span style="color:#F15200;">CAIPEX</span> jetzt automatisch.</div>
+      </div>
+
+      <div class="reveal rv4" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:32px;">
+        <button class="btn btn-teal mag" onclick="goToDemo()">
+          <i data-lucide="arrow-right"></i>Kostenlos bewerten
+        </button>
+        <button class="btn btn-cream mag" onclick="navigate('produkt')">So funktioniert's</button>
+      </div>
+
+      <!-- THOST Trust-Glint -->
+      <a class="trust-glint" href="https://www.thost.de" target="_blank" rel="noopener"
+         title="THOST – Website öffnen"
+         style="margin-top:22px; font-size:12px; font-weight:600; letter-spacing:0.01em;">Im Pilot mit <strong style="font-weight:800; letter-spacing:0.05em;">THOST</strong></a>
+
+    </div>
+
+    <!-- RIGHT — House Viz -->
+    <div style="flex:1; display:flex; align-items:center; justify-content:center; overflow:visible; min-width:0; padding:24px 0;">
+      <svg viewBox="0 75 480 255" role="img" aria-label="Haus, dessen Bauteile nach Zustand aufleuchten" style="width:100%;display:block;">
+        <!-- Boden -->
+        <line stroke="rgba(26,25,22,0.80)" fill="none" x1="100" y1="320" x2="380" y2="320"/>
+        <!-- Fundament -->
+        <rect stroke="#1a1916" fill="rgba(26,25,22,0.07)" stroke-width="1.8" x="156" y="300" width="168" height="16"/>
+        <!-- Korpus / Fassade -->
+        <rect stroke="#1a1916" fill="rgba(26,25,22,0.045)" stroke-width="1.8" x="170" y="128" width="140" height="172"/>
+        <!-- Satteldach -->
+        <polygon stroke="#1a1916" fill="rgba(26,25,22,0.03)" stroke-width="1.8" points="240,94 324,128 156,128"/>
+        <!-- Fenster -->
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="176" y="142" width="24" height="28"/>
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="228" y="142" width="24" height="28"/>
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="280" y="142" width="24" height="28"/>
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="176" y="182" width="24" height="28"/>
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="228" y="182" width="24" height="28"/>
+        <rect fill="none" stroke="rgba(26,25,22,0.58)" stroke-width="1.3" x="280" y="182" width="24" height="28"/>
+        <!-- Tür -->
+        <rect stroke="rgba(26,25,22,0.80)" fill="rgba(26,25,22,0.08)" stroke-width="1" x="222" y="260" width="36" height="40"/>
+        <!-- Scan -->
+        <g class="scan" id="scan">
+          <rect x="150" y="98" width="204" height="13" fill="rgba(241,82,0,0.08)"/>
+          <line x1="150" y1="104" x2="354" y2="104" stroke="#F15200" stroke-width="1.6"/>
+        </g>
+        <!-- Labels -->
+        <g class="lbl" id="l-dach">
+          <line stroke-width="1.4" x1="288" y1="117" x2="356" y2="117" stroke="#960018"/>
+          <text class="lbl-name" x="362" y="114" fill="#1a1916">Dach</text>
+          <text class="lbl-state" x="362" y="126" fill="#960018">Kritisch</text>
+        </g>
+        <g class="lbl" id="l-fenster">
+          <line stroke-width="1.4" x1="304" y1="196" x2="356" y2="196" stroke="#2f4f4f"/>
+          <text class="lbl-name" x="362" y="193" fill="#1a1916">Fenster</text>
+          <text class="lbl-state" x="362" y="205" fill="#2f4f4f">Gut</text>
+        </g>
+        <g class="lbl" id="l-fassade">
+          <line stroke-width="1.4" x1="310" y1="244" x2="356" y2="244" stroke="#2f4f4f"/>
+          <text class="lbl-name" x="362" y="241" fill="#1a1916">Fassade</text>
+          <text class="lbl-state" x="362" y="253" fill="#2f4f4f">Gut · WDVS</text>
+        </g>
+        <g class="lbl" id="l-heizung">
+          <line stroke-width="1.4" x1="258" y1="299" x2="356" y2="299" stroke="#960018"/>
+          <text class="lbl-name" x="362" y="296" fill="#1a1916">Heizung</text>
+          <text class="lbl-state" x="362" y="308" fill="#960018">Kritisch</text>
+        </g>
+      </svg>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN — FÜR WEN (Konstellation)
+     ================================================ -->
+<section class="screen" id="screen-fuerwen">
+  <div class="fw-stage">
+
+    <header class="fw-head">
+      <div class="label muted">Für wen</div>
+      <h2 class="fw-headline">Verschiedene Beteiligte. Dieselbe Aufgabe. <span class="fw-accent">Eine Antwort.</span></h2>
+    </header>
+
+    <div class="fw-constellation">
+      <div class="fw-grid" role="tablist" aria-label="Zielgruppen">
+
+        <button type="button" class="fw-card" data-fw="schule" role="tab" aria-pressed="false" onclick="fwSelect('schule')">
+          <div class="fw-house">
+            <div class="fw-scan"></div>
+            <svg viewBox="0 0 158 92" aria-hidden="true">
+              <line x1="8" y1="82" x2="122" y2="82" stroke="rgba(26,25,22,0.4)" stroke-width="1.4"/>
+              <rect x="22" y="44" width="86" height="38" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <rect x="19" y="38" width="92" height="6" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <line x1="33" y1="38" x2="33" y2="21" stroke="#1a1916" stroke-width="1.3"/>
+              <polygon points="33,21 47,25 33,29" fill="rgba(26,25,22,0.45)"/>
+              <rect x="29" y="50" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="45" y="50" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="77" y="50" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="93" y="50" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="59" y="62" width="13" height="20" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="1.2"/>
+              <g class="fw-lbl"><line x1="96" y1="24" x2="112" y2="24" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="22">Dach</text><text class="fw-lbl-state bad" x="115" y="30">Kritisch</text></g>
+              <g class="fw-lbl"><line x1="96" y1="52" x2="112" y2="52" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="50">Fenster</text><text class="fw-lbl-state good" x="115" y="58">Gut</text></g>
+              <g class="fw-lbl"><line x1="88" y1="72" x2="112" y2="72" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="70">Heizung</text><text class="fw-lbl-state bad" x="115" y="78">Kritisch</text></g>
+            </svg>
+          </div>
+          <div class="fw-role">Kommune</div>
+          <div class="fw-type">Schulen</div>
+          <div class="fw-cap">Der Bestand wächst — das Wissen über den Zustand nicht.</div>
+        </button>
+
+        <button type="button" class="fw-card" data-fw="mfh" role="tab" aria-pressed="false" onclick="fwSelect('mfh')">
+          <div class="fw-house">
+            <div class="fw-scan"></div>
+            <svg viewBox="0 0 158 92" aria-hidden="true">
+              <line x1="8" y1="82" x2="122" y2="82" stroke="rgba(26,25,22,0.4)" stroke-width="1.4"/>
+              <polygon points="40,26 70,10 100,26" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5" stroke-linejoin="round"/>
+              <rect x="44" y="26" width="52" height="56" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <rect x="50" y="32" width="9" height="9" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="66" y="32" width="9" height="9" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="81" y="32" width="9" height="9" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.1"/>
+              <rect x="63" y="68" width="13" height="14" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="1.2"/>
+              <g class="fw-lbl"><line x1="96" y1="18" x2="112" y2="18" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="16">Dach</text><text class="fw-lbl-state mid" x="115" y="24">Mittel</text></g>
+              <g class="fw-lbl"><line x1="96" y1="44" x2="112" y2="44" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="42">Fassade</text><text class="fw-lbl-state good" x="115" y="50">Gut</text></g>
+              <g class="fw-lbl"><line x1="96" y1="68" x2="112" y2="68" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="66">Leitungen</text><text class="fw-lbl-state bad" x="115" y="74">Offen</text></g>
+            </svg>
+          </div>
+          <div class="fw-role">Verwalter</div>
+          <div class="fw-type">Mehrfamilienhäuser</div>
+          <div class="fw-cap">Viele Objekte — Zustand und Erhalt leben in Excel und Köpfen.</div>
+        </button>
+
+        <button type="button" class="fw-card" data-fw="buero" role="tab" aria-pressed="false" onclick="fwSelect('buero')">
+          <div class="fw-house">
+            <div class="fw-scan"></div>
+            <svg viewBox="0 0 158 92" aria-hidden="true">
+              <line x1="8" y1="82" x2="122" y2="82" stroke="rgba(26,25,22,0.4)" stroke-width="1.4"/>
+              <rect x="46" y="14" width="44" height="68" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <rect x="52" y="20" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.45)" stroke-width="1"/>
+              <rect x="64" y="20" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.45)" stroke-width="1"/>
+              <rect x="76" y="20" width="8" height="8" fill="none" stroke="rgba(26,25,22,0.45)" stroke-width="1"/>
+              <rect x="62" y="68" width="14" height="14" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="1.2"/>
+              <g class="fw-lbl"><line x1="92" y1="22" x2="112" y2="22" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="20">Fassade</text><text class="fw-lbl-state good" x="115" y="28">Gut</text></g>
+              <g class="fw-lbl"><line x1="92" y1="44" x2="112" y2="44" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="42">Haustechnik</text><text class="fw-lbl-state bad" x="115" y="50">Kritisch</text></g>
+              <g class="fw-lbl"><line x1="92" y1="66" x2="112" y2="66" stroke="rgba(26,25,22,0.55)" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="64">CapEx</text><text class="fw-lbl-state mid" x="115" y="72">Unklar</text></g>
+            </svg>
+          </div>
+          <div class="fw-role">Asset Manager</div>
+          <div class="fw-type">Bürogebäude</div>
+          <div class="fw-cap">Beim Ankauf fehlt belastbare Klarheit über Zustand und CapEx.</div>
+        </button>
+
+        <button type="button" class="fw-card" data-fw="industrie" role="tab" aria-pressed="false" onclick="fwSelect('industrie')">
+          <div class="fw-house">
+            <div class="fw-scan"></div>
+            <svg viewBox="0 0 158 92" aria-hidden="true">
+              <line x1="8" y1="82" x2="122" y2="82" stroke="rgba(26,25,22,0.4)" stroke-width="1.4"/>
+              <polyline points="18,48 18,40 40,48 40,40 62,48 62,40 84,48 84,40 106,48" fill="none" stroke="#1a1916" stroke-width="1.5" stroke-linejoin="round"/>
+              <rect x="18" y="48" width="88" height="34" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <rect x="44" y="58" width="28" height="24" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="1.2"/>
+              <g class="fw-lbl"><line x1="96" y1="36" x2="112" y2="36" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="34">Dach</text><text class="fw-lbl-state bad" x="115" y="42">Kritisch</text></g>
+              <g class="fw-lbl"><line x1="96" y1="58" x2="112" y2="58" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="56">Halle</text><text class="fw-lbl-state good" x="115" y="64">Gut</text></g>
+              <g class="fw-lbl"><line x1="96" y1="74" x2="112" y2="74" stroke="#960018" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="72">Anlagen</text><text class="fw-lbl-state mid" x="115" y="80">Offen</text></g>
+            </svg>
+          </div>
+          <div class="fw-role">Eigennutzer</div>
+          <div class="fw-type">Industriehallen</div>
+          <div class="fw-cap">Technischer Bestand unklar — Erhalt kommt zu spät.</div>
+        </button>
+
+        <button type="button" class="fw-card" data-fw="ingenieur" role="tab" aria-pressed="false" onclick="fwSelect('ingenieur')">
+          <div class="fw-house">
+            <div class="fw-scan"></div>
+            <svg viewBox="0 0 158 92" aria-hidden="true">
+              <line x1="8" y1="82" x2="122" y2="82" stroke="rgba(26,25,22,0.4)" stroke-width="1.4"/>
+              <rect x="38" y="22" width="54" height="60" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5"/>
+              <rect x="44" y="28" width="42" height="32" fill="none" stroke="rgba(26,25,22,0.35)" stroke-width="1" stroke-dasharray="3 2"/>
+              <line x1="48" y1="36" x2="78" y2="36" stroke="rgba(26,25,22,0.35)" stroke-width="1"/>
+              <line x1="48" y1="44" x2="72" y2="44" stroke="rgba(26,25,22,0.35)" stroke-width="1"/>
+              <line x1="48" y1="52" x2="76" y2="52" stroke="rgba(26,25,22,0.35)" stroke-width="1"/>
+              <rect x="52" y="66" width="26" height="16" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="1.2"/>
+              <g class="fw-lbl"><line x1="94" y1="30" x2="112" y2="30" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="28">Plan</text><text class="fw-lbl-state good" x="115" y="36">Vollständig</text></g>
+              <g class="fw-lbl"><line x1="94" y1="50" x2="112" y2="50" stroke="#2f4f4f" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="48">Bauteile</text><text class="fw-lbl-state good" x="115" y="56">Erfasst</text></g>
+              <g class="fw-lbl"><line x1="94" y1="70" x2="112" y2="70" stroke="#F15200" stroke-width="1.1"/><text class="fw-lbl-name" x="115" y="68">Gutachten</text><text class="fw-lbl-state good" x="115" y="76">Bereit</text></g>
+            </svg>
+          </div>
+          <div class="fw-role">Sachverständige</div>
+          <div class="fw-type">Ingenieurbüros</div>
+          <div class="fw-cap">Jede Bewertung hängt am erfahrensten Kopf im Team.</div>
+        </button>
+
+      </div>
+
+      <div class="fw-hub" aria-hidden="true">
+        <svg class="fw-hub-art" viewBox="0 0 1000 36" preserveAspectRatio="none">
+          <line x1="100" y1="0" x2="500" y2="34"/>
+          <line x1="300" y1="0" x2="500" y2="34"/>
+          <line class="fw-hub-core" x1="500" y1="0" x2="500" y2="34"/>
+          <line x1="700" y1="0" x2="500" y2="34"/>
+          <line x1="900" y1="0" x2="500" y2="34"/>
+        </svg>
+        <div class="fw-hub-mark">CAIPEX</div>
+        <div class="fw-hub-tag">Eine Antwort.</div>
+      </div>
+    </div>
+
+    <div class="fw-close">
+      <p><span style="font-weight:800;">Niemand kennt das Ganze. Jeder braucht es.</span> <span class="fw-accent">CAIPEX scannt — einmal, für alle.</span></p>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN — PRINZIP (IST-Zustand vs MIT CAIPEX)
+     ================================================ -->
+<section class="screen" id="screen-prinzip">
+  <div class="iv-wrap" id="iv-wrap">
+
+    <!-- LINKS: IST — zurückgenommen, von Anfang an sichtbar -->
+    <div class="iv-left">
+      <div class="iv-istlabel">IST-Zustand</div>
+      <div class="iv-house" id="iv-isthouse">
+        <div class="iv-scanline" id="iv-scan"></div>
+        <svg viewBox="0 0 240 240" aria-hidden="true">
+          <line x1="30" y1="200" x2="210" y2="200" stroke="rgba(26,25,22,0.75)" stroke-width="1.8"/>
+          <polygon points="50,120 120,72 190,120" fill="rgba(26,25,22,0.08)" stroke="rgba(26,25,22,0.72)" stroke-width="2" stroke-linejoin="round"/>
+          <rect x="66" y="120" width="108" height="80" fill="rgba(26,25,22,0.07)" stroke="rgba(26,25,22,0.72)" stroke-width="2"/>
+          <rect x="80" y="138" width="22" height="26" fill="none" stroke="rgba(26,25,22,0.65)" stroke-width="1.5"/>
+          <rect x="138" y="138" width="22" height="26" fill="none" stroke="rgba(26,25,22,0.65)" stroke-width="1.5"/>
+          <rect x="109" y="160" width="22" height="40" fill="none" stroke="rgba(26,25,22,0.65)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <button class="iv-replay iv-replay-left" onclick="ivReset()"><i data-lucide="rotate-ccw"></i>Nochmal</button>
+    </div>
+
+    <!-- RECHTS: Intro → Mit CAIPEX -->
+    <div class="iv-right">
+
+      <div class="iv-intro">
+        <div class="iv-problem-title">Das Problem</div>
+        <p class="iv-text">Bei den meisten Gebäuden weiß niemand genau, in welchem Zustand sie wirklich sind. Das Wissen steckt in alten Ordnern, Excel-Tabellen und den Köpfen von einzelnen Personen — oder fehlt.</p>
+        <button class="btn btn-orange mag" onclick="ivPlay()">CAIPEX Bewertung starten</button>
+      </div>
+
+      <div class="iv-result">
+        <div class="iv-hero">
+          <h2 class="iv-headline">Mit <span class="iv-caipex-mark">CAIPEX</span> wissen Sie, in welchem Zustand Ihr Gebäude wirklich ist.</h2>
+        </div>
+        <div class="iv-house iv-caipex">
+          <svg viewBox="0 0 650 300" aria-hidden="true">
+            <line x1="50" y1="250" x2="270" y2="250" stroke="rgba(26,25,22,0.4)" stroke-width="2"/>
+            <polygon points="70,150 165,90 260,150" fill="rgba(26,25,22,0.05)" stroke="#1a1916" stroke-width="2.2" stroke-linejoin="round"/>
+            <rect x="90" y="150" width="150" height="100" fill="rgba(26,25,22,0.035)" stroke="#1a1916" stroke-width="2.2"/>
+            <rect x="112" y="172" width="34" height="40" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.8"/>
+            <rect x="196" y="172" width="34" height="40" fill="none" stroke="rgba(26,25,22,0.5)" stroke-width="1.8"/>
+            <rect x="150" y="205" width="38" height="45" fill="none" stroke="rgba(26,25,22,0.7)" stroke-width="2"/>
+            <g class="iv-lbl">
+              <line class="iv-lbl-line" x1="216" y1="118" x2="298" y2="118" stroke="#F15200" stroke-width="1.2"/>
+              <circle class="iv-lbl-dot" cx="210" cy="118" r="5" fill="#F15200"/>
+              <text class="iv-lbl-info" x="304" y="106" font-family="Figtree, sans-serif" font-size="13" font-weight="700" fill="#1a1916">Dach: ca. 25 Jahre alt, Zustand gut</text>
+              <text class="iv-lbl-mass" x="304" y="124" font-family="Figtree, sans-serif" font-size="12" font-weight="700" fill="#F15200">Maßnahme: Wartung in 5 Jahren</text>
+            </g>
+            <g class="iv-lbl">
+              <line class="iv-lbl-line" x1="219" y1="192" x2="298" y2="192" stroke="#2f4f4f" stroke-width="1.2"/>
+              <circle class="iv-lbl-dot" cx="213" cy="192" r="5" fill="#2f4f4f"/>
+              <text class="iv-lbl-info" x="304" y="180" font-family="Figtree, sans-serif" font-size="13" font-weight="700" fill="#1a1916">Fenster: ca. 25 Jahre alt, Zustand gut</text>
+              <text class="iv-lbl-mass" x="304" y="198" font-family="Figtree, sans-serif" font-size="12" font-weight="700" fill="#2f4f4f">Maßnahme: Austausch in 4–6 Jahren</text>
+            </g>
+            <g class="iv-lbl">
+              <line class="iv-lbl-line" x1="241" y1="236" x2="298" y2="236" stroke="#2f4f4f" stroke-width="1.2"/>
+              <circle class="iv-lbl-dot" cx="235" cy="236" r="5" fill="#2f4f4f"/>
+              <text class="iv-lbl-info" x="304" y="224" font-family="Figtree, sans-serif" font-size="13" font-weight="700" fill="#1a1916">Heizung: ca. 18 Jahre alt, Zustand gut</text>
+              <text class="iv-lbl-mass" x="304" y="242" font-family="Figtree, sans-serif" font-size="12" font-weight="700" fill="#2f4f4f">Maßnahme: Tausch in 8 Jahren</text>
+            </g>
+          </svg>
+        </div>
+        <div class="iv-benefits">
+          <div class="iv-benefit">Automatisiertes Dokumentenmanagement per Drag&amp;Drop</div>
+          <div class="iv-benefit">Automatisierte Bauteilanalyse durch geführte App</div>
+          <div class="iv-benefit">Intelligente Immobilienverwaltung mit aktiver Maßnahmenempfehlung</div>
+          <div class="iv-benefit">Echtzeitprognosen und Anpassungen auf Marktschwankungen</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN 2 — PRODUKT
+     ================================================ -->
+<section class="screen" id="screen-produkt">
+  <div class="wf-wrap" id="wf-wrap">
+
+    <div class="wf-head">
+      <h2 class="wf-title">Vom Foto zur intelligenten Immobilienverwaltung</h2>
+    </div>
+
+    <nav class="wf-nav" aria-label="Prozessschritte">
+      <button type="button" class="wf-nav-item active" id="wf-btn-1" onclick="wfSelect(1)">
+        <div class="wf-num-box">1</div>
+        <span class="wf-nav-label">Objekt</span>
+      </button>
+      <button type="button" class="wf-nav-item" id="wf-btn-2" onclick="wfSelect(2)">
+        <div class="wf-num-box">2</div>
+        <span class="wf-nav-label">Dokumente</span>
+      </button>
+      <button type="button" class="wf-nav-item" id="wf-btn-3" onclick="wfSelect(3)">
+        <div class="wf-num-box">3</div>
+        <span class="wf-nav-label">Foto</span>
+      </button>
+      <button type="button" class="wf-nav-item" id="wf-btn-4" onclick="wfSelect(4)">
+        <div class="wf-num-box">4</div>
+        <span class="wf-nav-label">Analyse</span>
+      </button>
+      <button type="button" class="wf-nav-item" id="wf-btn-5" onclick="wfSelect(5)">
+        <div class="wf-num-box">5</div>
+        <span class="wf-nav-label">Ergebnis</span>
+      </button>
+      <button type="button" class="wf-nav-item" id="wf-btn-6" onclick="wfSelect(6)">
+        <div class="wf-num-box">6</div>
+        <span class="wf-nav-label">Verwaltung</span>
+      </button>
+    </nav>
+
+    <div class="wf-progress" aria-hidden="true"><div class="wf-progress-fill" id="wf-progress-fill"></div></div>
+
+    <div class="wf-body">
+      <div class="wf-media-col">
+        <div class="wf-media-frame" id="wf-media-frame">
+          <div class="wf-scanline" id="wf-scanline"></div>
+
+          <div class="wf-placeholder visible" id="wf-p-1">
+            <div class="wf-ph-inner">
+              <svg viewBox="0 0 120 100" aria-hidden="true">
+                <rect x="18" y="22" width="84" height="58" rx="6" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.8"/>
+                <path d="M30 38 H90 M30 50 H78 M30 62 H84" stroke="rgba(26,25,22,0.35)" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="72" y="8" width="28" height="22" rx="4" fill="rgba(241,82,0,0.12)" stroke="#F15200" stroke-width="1.4"/>
+                <path d="M78 18 L86 26 L78 34" fill="none" stroke="#F15200" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="wf-ph-tag">Adresse &amp; Objekt</span>
+            </div>
+          </div>
+
+          <div class="wf-placeholder" id="wf-p-2">
+            <div class="wf-ph-inner">
+              <svg viewBox="0 0 120 100" aria-hidden="true">
+                <rect x="14" y="18" width="44" height="56" rx="4" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5" transform="rotate(-6 36 46)"/>
+                <rect x="38" y="14" width="44" height="56" rx="4" fill="rgba(26,25,22,0.06)" stroke="#1a1916" stroke-width="1.5"/>
+                <rect x="62" y="20" width="44" height="56" rx="4" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.5" transform="rotate(5 84 48)"/>
+                <path d="M48 30 H72 M48 40 H68 M48 50 H70" stroke="rgba(26,25,22,0.28)" stroke-width="1.3" stroke-linecap="round"/>
+                <rect x="78" y="6" width="26" height="20" rx="4" fill="rgba(241,82,0,0.12)" stroke="#F15200" stroke-width="1.3"/>
+                <path d="M84 14 L90 20 L84 26" fill="none" stroke="#F15200" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="wf-checklist">
+                <div class="wf-check" id="wf-ch-1"><i data-lucide="check"></i>Flächenermittlung</div>
+                <div class="wf-check" id="wf-ch-2"><i data-lucide="check"></i>Begehung vorbereiten</div>
+                <div class="wf-check" id="wf-ch-3"><i data-lucide="check"></i>Bauteile erkannt</div>
+              </div>
+            </div>
+          </div>
+
+          <video id="wf-vid-3" src="bauteil.mp4" muted playsinline loop></video>
+
+          <div class="wf-placeholder wf-analyze" id="wf-p-4">
+            <div class="wf-ph-inner">
+              <svg viewBox="0 0 320 160" aria-hidden="true">
+                <line x1="30" y1="140" x2="130" y2="140" stroke="rgba(26,25,22,0.35)" stroke-width="1.5"/>
+                <polygon points="45,70 85,42 125,70" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.6" stroke-linejoin="round"/>
+                <rect x="52" y="70" width="66" height="70" fill="rgba(26,25,22,0.03)" stroke="#1a1916" stroke-width="1.6"/>
+                <g class="wf-lbl">
+                  <line class="wf-lbl-line" x1="118" y1="58" x2="168" y2="58" stroke="#F15200" stroke-width="1.2"/>
+                  <circle class="wf-lbl-dot" cx="112" cy="58" r="4" fill="#F15200"/>
+                  <text class="wf-lbl-txt" x="174" y="62" font-family="Figtree,sans-serif" font-size="11" font-weight="700" fill="#1a1916">Dach: gut</text>
+                </g>
+                <g class="wf-lbl">
+                  <line class="wf-lbl-line" x1="118" y1="92" x2="168" y2="92" stroke="#2f4f4f" stroke-width="1.2"/>
+                  <circle class="wf-lbl-dot" cx="112" cy="92" r="4" fill="#2f4f4f"/>
+                  <text class="wf-lbl-txt" x="174" y="96" font-family="Figtree,sans-serif" font-size="11" font-weight="700" fill="#1a1916">Fenster: gut</text>
+                </g>
+                <g class="wf-lbl">
+                  <line class="wf-lbl-line" x1="118" y1="124" x2="168" y2="124" stroke="#2f4f4f" stroke-width="1.2"/>
+                  <circle class="wf-lbl-dot" cx="112" cy="124" r="4" fill="#2f4f4f"/>
+                  <text class="wf-lbl-txt" x="174" y="128" font-family="Figtree,sans-serif" font-size="11" font-weight="700" fill="#1a1916">Heizung: gut</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="wf-placeholder" id="wf-p-5">
+            <div class="wf-ph-inner">
+              <svg viewBox="0 0 100 100" aria-hidden="true">
+                <rect x="22" y="12" width="56" height="72" rx="4" fill="rgba(26,25,22,0.04)" stroke="#1a1916" stroke-width="1.6"/>
+                <path d="M32 28 H68 M32 40 H62 M32 52 H66 M32 64 H54" stroke="rgba(26,25,22,0.30)" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              <div class="wf-export-doc" id="wf-export-doc">
+                <strong>Gutachten &amp; CapEx-Plan</strong>
+                <span>Exportierbar · prüfbar · Gutachter-Standard</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="wf-placeholder" id="wf-p-6">
+            <div class="wf-finale">
+              <div class="wf-finale-card" id="wf-fc-1"><em>Maßnahme:</em> Dachwartung in 5 Jahren</div>
+              <div class="wf-finale-card" id="wf-fc-2"><em>CapEx:</em> Prognose automatisch angepasst</div>
+              <div class="wf-finale-card" id="wf-fc-3"><em>Empfehlung:</em> Fenster-Austausch vorziehen</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf-copy-col" id="wf-copy-col">
+        <div class="wf-step-title" id="wf-step-title">Objekt anlegen</div>
+        <p class="wf-caption" id="wf-caption">Adresse eingeben — CAIPEX legt das Objekt an und strukturiert alle Stammdaten.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <aside class="wf-pip" aria-label="Video: Workflow-Erklärung (demnächst)">
+    <div class="wf-pip-frame">
+      <img src="workflow-presenter.png" alt="" class="wf-pip-img" width="142" height="222">
+      <span class="wf-pip-badge">Demnächst</span>
+      <span class="wf-pip-play" aria-hidden="true"><i data-lucide="play"></i></span>
+    </div>
+    <span class="wf-pip-label">Workflow-Erklärung per Video</span>
+  </aside>
+</section>
+
+
+<!-- ================================================
+     SCREEN 4 — PREISE
+     ================================================ -->
+<section class="screen" id="screen-preise" style="padding: 40px 56px 36px;">
+  <div style="width:100%; max-width:1080px; display:flex; flex-direction:column; height:100%; gap:24px;">
+
+    <!-- Headline -->
+    <div>
+      <div class="label muted" style="margin-bottom:8px;">Preise</div>
+      <h2 style="font-size:clamp(22px,2.4vw,30px); line-height:1.15;">
+        Erste Bewertung kostenlos.<br>
+        <span style="color:var(--teal);">Dann pro Objekt — kein Abo.</span>
+      </h2>
+    </div>
+
+    <!-- 3 cards -->
+    <div style="display:grid; grid-template-columns:0.82fr 1.15fr 1fr; gap:16px; flex:1; min-height:0; align-items:stretch;">
+
+      <!-- Demo -->
+      <div class="pcard" style="display:flex; flex-direction:column; gap:16px; padding:28px; border:1px solid rgba(26,25,22,0.12); border-radius:10px; background:var(--base);">
+        <div class="price-viz">
+          <div class="ph-scanline"></div>
+          <svg viewBox="0 0 80 80" aria-hidden="true">
+            <line class="ph-faint" x1="16" y1="70" x2="64" y2="70"/>
+            <polygon class="ph-probe" points="22,42 40,26 58,42"/>
+            <rect class="ph-probe" x="27" y="42" width="26" height="28"/>
+            <rect class="ph-probe" x="36" y="56" width="8" height="14"/>
+            <circle class="ph-dot" cx="40" cy="26" r="2.6"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size:22px; font-weight:900; color:var(--ink); margin-bottom:12px; letter-spacing:-0.01em;">Demo</div>
+          <div style="font-size:42px; font-weight:900; font-variant-numeric:tabular-nums; line-height:1; color:var(--ink);">0 €</div>
+        </div>
+        <div class="pflist" style="flex:1; display:flex; flex-direction:column;">
+          <div class="pf"><i data-lucide="check"></i>1 vollständige Bewertung</div>
+          <div class="pf"><i data-lucide="check"></i>Alle drei Wertverfahren</div>
+          <div class="pf"><i data-lucide="check"></i>PDF-Export, keine Kreditkarte</div>
+        </div>
+        <button class="btn btn-cream" onclick="goToDemo()" style="align-self:flex-start;">
+          Jetzt starten
+        </button>
+      </div>
+
+      <!-- CAIPEX Asset — highlighted -->
+      <div class="pcard" style="display:flex; flex-direction:column; gap:16px; padding:28px; border:2px solid var(--teal); border-radius:10px; background:rgba(47,79,79,0.10);">
+        <div style="position:absolute; top:-1px; left:28px; background:var(--teal); color:#fff; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; padding:3px 10px; border-radius:0 0 6px 6px; z-index:2;">Meistgewählt</div>
+        <div class="price-viz">
+          <div class="ph-scanline"></div>
+          <svg viewBox="0 0 80 80" aria-hidden="true">
+            <line class="ph-faint" x1="12" y1="70" x2="68" y2="70"/>
+            <polygon class="ph-house" points="19,38 40,21 61,38"/>
+            <rect class="ph-house" x="24" y="38" width="32" height="32"/>
+            <rect class="ph-faint" x="29" y="44" width="7" height="8"/>
+            <rect class="ph-faint" x="44" y="44" width="7" height="8"/>
+            <rect class="ph-house" x="35" y="58" width="10" height="12"/>
+            <circle class="ph-dot" cx="32.5" cy="48" r="2.4"/>
+            <circle class="ph-dot" cx="47.5" cy="48" r="2.4"/>
+            <circle class="ph-dot" cx="40" cy="21" r="2.6"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size:22px; font-weight:900; color:var(--teal); margin-bottom:12px; letter-spacing:-0.01em;">CAIPEX Asset</div>
+          <div style="font-size:42px; font-weight:900; font-variant-numeric:tabular-nums; line-height:1; color:var(--teal); white-space:nowrap;">250 – 450 €</div>
+        </div>
+        <div class="pflist" style="flex:1; display:flex; flex-direction:column;">
+          <div class="pf"><i data-lucide="check"></i>Vollständige Einzelbewertung, alle drei Verfahren</div>
+          <div class="pf"><i data-lucide="check"></i>Begehungsplan, Akte & PDF-Export</div>
+          <div class="pf"><i data-lucide="check"></i>CapEx-Plan & Zustandsbericht</div>
+        </div>
+        <button class="btn btn-teal" onclick="goToDemo()">
+          <i data-lucide="arrow-right"></i>
+          CAIPEX starten
+        </button>
+      </div>
+
+      <!-- CAIPEX Portfolio -->
+      <div class="pcard" style="display:flex; flex-direction:column; gap:16px; padding:28px; border:1px solid rgba(26,25,22,0.12); border-radius:10px; background:var(--base);">
+        <div class="price-viz">
+          <div class="ph-scanline"></div>
+          <svg viewBox="0 0 124 80" aria-hidden="true">
+            <line class="ph-faint" x1="6" y1="70" x2="118" y2="70"/>
+            <!-- Haus A -->
+            <polygon class="ph-house" points="6,50 15,40 24,50"/>
+            <rect class="ph-house" x="8" y="50" width="14" height="20"/>
+            <!-- Haus B -->
+            <polygon class="ph-house" points="26,42 35,32 44,42"/>
+            <rect class="ph-house" x="28" y="42" width="14" height="28"/>
+            <!-- Haus C (vorne) -->
+            <polygon class="ph-house" points="45,46 56,34 67,46"/>
+            <rect class="ph-house" x="48" y="46" width="16" height="24"/>
+            <!-- Haus D -->
+            <polygon class="ph-house" points="68,40 77,30 86,40"/>
+            <rect class="ph-house" x="70" y="40" width="14" height="30"/>
+            <!-- Haus E -->
+            <polygon class="ph-house" points="88,52 97,43 106,52"/>
+            <rect class="ph-house" x="90" y="52" width="14" height="18"/>
+            <circle class="ph-dot" cx="35" cy="32" r="2.4"/>
+            <circle class="ph-dot" cx="56" cy="34" r="2.6"/>
+            <circle class="ph-dot" cx="77" cy="30" r="2.4"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size:22px; font-weight:900; color:var(--ink); margin-bottom:12px; letter-spacing:-0.01em;">CAIPEX Portfolio</div>
+          <div style="font-size:42px; font-weight:900; font-variant-numeric:tabular-nums; line-height:1; color:var(--ink);">Individuell</div>
+        </div>
+        <div class="pflist" style="flex:1; display:flex; flex-direction:column;">
+          <div class="pf"><i data-lucide="check"></i>Alle Asset-Leistungen inklusive</div>
+          <div class="pf"><i data-lucide="check"></i>Team-Zugänge & dedizierter Ansprechpartner</div>
+          <div class="pf"><i data-lucide="check"></i>Volumenrabatt nach Portfoliogröße</div>
+        </div>
+        <button class="btn btn-cream" onclick="goToDemo()" style="align-self:flex-start;">
+          Gespräch vereinbaren
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Footnote -->
+    <p style="font-size:12px; color:rgba(26,25,22,0.62); text-align:center;">
+      Asset-Preis richtet sich nach Objektgröße und Komplexität — wir nennen dir den genauen Preis vor Beginn.
+    </p>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN 5 — FAQ (Gemini Chat Style)
+     ================================================ -->
+<section class="screen" id="screen-faq" style="padding:0; justify-content:stretch; align-items:stretch;">
+  <div id="faq-shell" style="display:flex; flex-direction:column; width:100%; height:100%; position:relative; background:var(--cream);">
+
+    <!-- CHAT AREA -->
+    <div id="faq-chat" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center; padding:40px 24px 16px;">
+      <!-- messages injected here -->
+    </div>
+
+    <!-- BOTTOM INPUT ZONE -->
+    <div id="faq-bottom" style="flex-shrink:0; padding:10px 24px 20px; display:flex; flex-direction:column; align-items:center; gap:8px;">
+
+      <!-- SUGGESTION CHIPS (shown until first question) -->
+      <div id="faq-chips" style="display:flex; flex-wrap:wrap; gap:6px; justify-content:center; width:calc(100vw - 48px); overflow:visible;">
+        <button class="faq-chip" onclick="faqAsk('Für wen ist Caipex gedacht?')">Für wen ist Caipex gedacht?</button>
+        <button class="faq-chip" onclick="faqAsk('Wie verlässlich sind die Ergebnisse?')">Wie verlässlich sind die Ergebnisse?</button>
+        <button class="faq-chip" onclick="faqAsk('Brauche ich Vorkenntnisse?')">Brauche ich Vorkenntnisse?</button>
+        <button class="faq-chip" onclick="faqAsk('Wie ist das mit Datenschutz und DSGVO?')">Wie ist das mit Datenschutz und DSGVO?</button>
+        <button class="faq-chip" onclick="faqAsk('Gibt es eine kostenlose Testphase?')">Gibt es eine kostenlose Testphase?</button>
+        <button class="faq-chip" onclick="faqAsk('Was passiert nach der Demo-Anfrage?')">Was passiert nach der Demo-Anfrage?</button>
+        <button class="faq-chip" onclick="faqAsk('Wie schnell ist eine Bewertung fertig?')">Wie schnell ist eine Bewertung fertig?</button>
+        <button class="faq-chip" onclick="faqAsk('Welche Bewertungsverfahren werden unterstützt?')">Welche Bewertungsverfahren werden unterstützt?</button>
+        <button class="faq-chip" onclick="faqAsk('Was kostet Caipex?')">Was kostet Caipex?</button>
+        <button class="faq-chip" onclick="faqAsk('Kann ich Caipex in mein Team integrieren?')">Kann ich Caipex in mein Team integrieren?</button>
+      </div>
+
+      <!-- INPUT BAR -->
+      <div id="faq-input-wrap" style="width:100%; max-width:760px; background:#fff; border:1.5px solid rgba(26,25,22,0.13); border-radius:24px; display:flex; align-items:center; padding:12px 16px 12px 20px; gap:10px; box-shadow:0 2px 12px rgba(26,25,22,0.06); transition:border-color 0.2s;">
+        <input id="faq-input" type="text" placeholder="Frage stellen …"
+          style="flex:1; border:none; outline:none; background:transparent; font-family:inherit; font-size:15px; color:var(--ink); line-height:1.5;"
+          onkeydown="if(event.key==='Enter'){faqSubmit();}"
+          onfocus="document.getElementById('faq-input-wrap').style.borderColor='var(--teal)'"
+          onblur="document.getElementById('faq-input-wrap').style.borderColor='rgba(26,25,22,0.13)'">
+        <button onclick="faqSubmit()" style="background:var(--teal); border:none; border-radius:50%; width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:opacity 0.2s;">
+          <i data-lucide="arrow-up" style="width:16px;height:16px;stroke:#fff;stroke-width:2.5;"></i>
+        </button>
+      </div>
+
+
+    </div>
+
+    <!-- INITIAL CENTER STATE (hidden after first question) -->
+    <div id="faq-welcome" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; padding-bottom:180px;">
+      <p style="font-size:clamp(22px,3vw,32px); font-weight:700; color:var(--ink); margin:0 0 8px; text-align:center; letter-spacing:-0.02em;">Stell uns eine Frage.</p>
+      <p style="font-size:15px; color:rgba(26,25,22,0.5); margin:0; text-align:center;">Wähle eine Frage unten oder tippe deine eigene.</p>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN 6 — WER WIR SIND
+     ================================================ -->
+<section class="screen" id="screen-team">
+  <div id="screen-team-inner">
+
+    <!-- HERO — Vollbild mit "Über uns" oben + Satz mittig -->
+    <div style="position:relative; width:100%; height:calc(100vh - 80px); flex-shrink:0;">
+      <img src="IMG_4490.jpg" alt="CAIPEX Gründer" style="width:100%; height:100%; object-fit:cover; display:block;">
+      <div style="position:absolute; inset:0; background:rgba(26,25,22,0.38); display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:56px 64px 160px;">
+        <h1 style="font-size:clamp(52px,8vw,110px); font-weight:900; color:#ffffff; line-height:0.9; letter-spacing:-0.02em; text-align:center;">Über uns</h1>
+        <p style="font-size:clamp(15px,1.6vw,22px); font-weight:600; color:rgba(255,255,255,0.88); text-align:center; max-width:900px; line-height:1.5;">
+          Durch die Leidenschaft zu Immobilien, Technologie und Ingenieurskunst wollten wir unbedingt den Prozess der Gebäudeanalyse verbessern.
+        </p>
+      </div>
+    </div>
+
+    <!-- TEXT — Unternehmensgeschichte, 3 Zeilen -->
+    <div style="padding:28px 64px 0;">
+      <p style="font-size:clamp(14px,1.15vw,16px); line-height:1.7; color:var(--ink); max-width:1000px;">
+        Seit über 10 Jahren beschäftigen wir uns mit der Analyse von Bestandsimmobilien. 2023 haben wir begonnen, künstliche Intelligenz dafür einzusetzen. Seit Anfang 2025 verbinden wir unsere Fachkompetenz in der Immobilienanalyse mit den Möglichkeiten der KI — mit einem Ziel: den komplexen Prozess der ganzheitlichen, technischen Immobilienbewertung radikal zu vereinfachen, ohne an fachlicher Tiefe zu verlieren.
+      </p>
+    </div>
+
+    <!-- TEAM -->
+    <div style="padding:48px 64px 72px; display:flex; flex-direction:column; gap:24px;">
+
+      <h2 style="font-size:clamp(20px,2.2vw,28px);">Zwei Gründer. Eine Überzeugung.</h2>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:start;">
+
+        <!-- LUCAS -->
+        <div style="display:grid; grid-template-columns:auto 1fr; gap:28px; align-items:start;">
+          <div class="foto foto-teal" style="width:264px;">
+            <img src="lucas-pfeiffer.png" alt="Lucas Pfeiffer" style="width:100%; height:auto; display:block;">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:16px; padding-top:8px;">
+            <div>
+              <div style="font-size:22px; font-weight:900; color:var(--ink); line-height:1.1;">Lucas Pfeiffer</div>
+              <div class="label muted" style="margin-top:5px;">Founder</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <a href="mailto:l.pfeiffer@caipex.de" class="btn btn-teal mag" style="font-size:10px; align-self:flex-start;">
+                <i data-lucide="mail"></i>l.pfeiffer@caipex.de
+              </a>
+              <a href="tel:+4915204038662" class="btn btn-cream mag" style="font-size:10px; align-self:flex-start; text-decoration:none;">
+                <i data-lucide="phone"></i>0152 04038662
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- BERNHARD -->
+        <div style="display:grid; grid-template-columns:auto 1fr; gap:28px; align-items:start;">
+          <div class="foto foto-cherry" style="width:264px;">
+            <img src="bernhard-schochenmaier.png" alt="Bernhard Schochenmaier" style="width:100%; height:auto; display:block;">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:16px; padding-top:8px;">
+            <div>
+              <div style="font-size:22px; font-weight:900; color:var(--ink); line-height:1.1;">Bernhard Schochenmaier</div>
+              <div class="label muted" style="margin-top:5px;">Founder</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <a href="mailto:b.schochenmaier@caipex.de" class="btn btn-cherry mag" style="font-size:10px; align-self:flex-start; text-decoration:none;">
+                <i data-lucide="mail"></i>b.schochenmaier@caipex.de
+              </a>
+              <span class="btn btn-cream" style="font-size:10px; align-self:flex-start; opacity:0.5; cursor:default;">
+                <i data-lucide="phone"></i>auf Anfrage
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================================================
+     SCREEN 7 — DEMO
+     ================================================ -->
+<section class="screen" id="screen-demo">
+  <div class="mwl">
+    <div class="g2">
+
+      <div class="stk" style="gap: 24px;">
+        <div>
+          <div class="label muted" style="margin-bottom: 10px;">Demo anfragen</div>
+          <h2>Zeig uns dein Büro.<br>Wir zeigen dir Caipex.</h2>
+        </div>
+        <p class="body">Kein Verkaufsgespräch. Ein ehrliches Gespräch darüber ob Caipex zu deinem Workflow passt — an einem echten Objekt, mit deinen Zahlen.</p>
+        <div class="stk" style="gap: 18px; border-top: var(--line-soft); padding-top: 20px;">
+          <div class="row" style="align-items: flex-start; gap: 14px;">
+            <div class="step-num">1</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Kurzes Gespräch</div>
+              <p class="small">30 Minuten. Wir verstehen deinen Workflow.</p>
+            </div>
+          </div>
+          <div class="row" style="align-items: flex-start; gap: 14px;">
+            <div class="step-num">2</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Live-Demo</div>
+              <p class="small">Caipex an einem deiner echten Objekte.</p>
+            </div>
+          </div>
+          <div class="row" style="align-items: flex-start; gap: 14px;">
+            <div class="step-num">3</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Pilot starten</div>
+              <p class="small">Wenn es passt — direkt loslegen. Kein Druck.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <form class="stk" style="gap: 18px;" onsubmit="submitForm(event)">
+        <div class="stk" style="gap: 5px;">
+          <label class="label muted">Name</label>
+          <input class="field" type="text" placeholder="z. B. Thomas Müller" required>
+        </div>
+        <div class="stk" style="gap: 5px;">
+          <label class="label muted">E-Mail</label>
+          <input class="field" type="email" placeholder="z. B. t.mueller@buero.de" required>
+        </div>
+        <div class="stk" style="gap: 5px;">
+          <label class="label muted">Unternehmen</label>
+          <input class="field" type="text" placeholder="z. B. Ingenieurbüro Müller GmbH" required>
+        </div>
+        <div class="stk" style="gap: 5px;">
+          <label class="label muted">Was beschäftigt dich gerade?</label>
+          <textarea class="field" rows="3" placeholder="z. B. Wir machen 40 Bewertungen im Monat, jede dauert drei Tage..."></textarea>
+        </div>
+        <label class="privacy-check">
+          <input type="checkbox" id="privacy-consent" name="privacy-consent" required>
+          <span class="small">Ich willige ein, dass CAIPEX meine Angaben zur Bearbeitung meiner Demo-Anfrage verarbeitet. Details in der <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzerklärung</a>.</span>
+        </label>
+        <div style="margin-top: 4px;">
+          <button type="submit" class="btn btn-teal">
+            <i data-lucide="arrow-right"></i>
+            Anfrage senden
+          </button>
+        </div>
+        <p class="small">Wir melden uns innerhalb von 24 Stunden. Kein Spam, kein Funnel.</p>
+      </form>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ================================================
+     FLOATING DOCK + LEGAL
+     ================================================ -->
+<div id="dock-bar">
+<nav id="dock" role="navigation" aria-label="Hauptnavigation">
+
+  <div class="dock-item active" id="di-home"        onclick="navigate('home')">
+    <i data-lucide="home"></i>
+    <span class="d-label">Home</span>
+  </div>
+  <div class="dock-item"        id="di-fuerwen"     onclick="navigate('fuerwen')">
+    <i data-lucide="users-round"></i>
+    <span class="d-label">Für wen</span>
+  </div>
+  <div class="dock-item"        id="di-prinzip"     onclick="navigate('prinzip')">
+    <i data-lucide="radar"></i>
+    <span class="d-label">Ihr Vorteil</span>
+  </div>
+  <div class="dock-item"        id="di-produkt"     onclick="navigate('produkt')">
+    <i data-lucide="layers"></i>
+    <span class="d-label">Workflow</span>
+  </div>
+  <div class="dock-item"        id="di-team"        onclick="navigate('team')">
+    <i data-lucide="users"></i>
+    <span class="d-label">Wer wir sind</span>
+  </div>
+  <div class="dock-item"        id="di-faq"         onclick="navigate('faq')">
+    <i data-lucide="help-circle"></i>
+    <span class="d-label">FAQ</span>
+  </div>
+  <div class="dock-item"        id="di-preise"      onclick="navigate('preise')">
+    <i data-lucide="tag"></i>
+    <span class="d-label">Preise</span>
+  </div>
+
+  <div class="dock-sep"></div>
+
+  <button class="dock-cta" id="dock-cta-btn" onclick="goToDemo()">
+    <i data-lucide="arrow-right"></i>
+    Demo anfragen
+  </button>
+
+</nav>
+
+<footer id="dock-legal" aria-label="Rechtliches">
+  <a href="impressum.html">Impressum</a>
+  <span aria-hidden="true">·</span>
+  <a href="datenschutz.html">Datenschutz</a>
+</footer>
+</div>
+
+
+<!-- ================================================
+     INTENT PILL OVERLAY
+     ================================================ -->
+<div id="pill-dim" style="position:fixed;inset:0;background:rgba(26,25,22,0);z-index:9000;display:flex;align-items:center;justify-content:center;pointer-events:none;transition:background 0.25s cubic-bezier(0.2,0,0,1);">
+  <div id="pill" style="background:var(--teal);color:var(--cream);padding:10px 28px;font-family:'Figtree',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;opacity:0;transform:scale(0.75);transition:transform 0.25s cubic-bezier(0.2,0,0,1),opacity 0.25s;"></div>
+</div>
+
+
+<script>
+// ================================================
+// NAVIGATION
+// ================================================
+let current = 'home';
+let animating = false;
+
+const dockMap = {
+  home: 'di-home', fuerwen: 'di-fuerwen', prinzip: 'di-prinzip', produkt: 'di-produkt',
+  preise: 'di-preise', faq: 'di-faq', team: 'di-team', demo: null
+};
+
+// ================================================
+// PRODUKT / WORKFLOW
+// ================================================
+const WF_TITLES = [
+  'Objekt anlegen',
+  'Dokumente uploaden',
+  'Bauteil fotografieren',
+  'Automatische Analyse',
+  'Ergebnis speichern',
+  'Intelligente Immobilienverwaltung'
+];
+const WF_CAPTIONS = [
+  'Adresse eingeben — CAIPEX legt das Objekt an und strukturiert alle Stammdaten.',
+  'Unterlagen hochladen — CAIPEX wertet sie aus für Flächenermittlung und die Vorbereitung der Gebäudebegehung.',
+  'Die App führt durch das Objekt. Fotos landen direkt am richtigen Bauteil.',
+  'Zustand, Alter, Kritikalität — automatisch bewertet und dokumentiert.',
+  'Zustandsbericht, CapEx-Plan, Bewertung — exportierbar, Gutachter-Standard.',
+  'Aktive Maßnahmenempfehlungen, Prognosen und laufende Verwaltung — immer aktuell.'
+];
+const WF_MEDIA_IDS = ['wf-p-1', 'wf-p-2', 'wf-vid-3', 'wf-p-4', 'wf-p-5', 'wf-p-6'];
+const WF_DURATIONS = [4500, 4500, 4500, 5000, 4500, 5500];
+const WF_STEP_COUNT = 6;
+
+let wfCurrent = 0;
+let wfAutoTimer = null;
+
+function wfStop() {
+  clearTimeout(wfAutoTimer);
+  wfAutoTimer = null;
+  var v = document.getElementById('wf-vid-3');
+  if (v) { v.pause(); v.currentTime = 0; }
+}
+
+function wfPauseVideos() {
+  document.querySelectorAll('#screen-produkt video').forEach(function(v) { v.pause(); });
+}
+
+function wfRunScan() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var scan = document.getElementById('wf-scanline');
+  if (!scan) return;
+  scan.classList.remove('run');
+  void scan.offsetWidth;
+  scan.classList.add('run');
+}
+
+function wfResetStepAnim() {
+  document.querySelectorAll('#wf-p-2 .wf-check').forEach(function(c) { c.classList.remove('on'); });
+  document.querySelectorAll('#wf-p-4 .wf-lbl').forEach(function(l) { l.classList.remove('on'); });
+  var doc = document.getElementById('wf-export-doc');
+  if (doc) doc.classList.remove('on');
+  document.querySelectorAll('.wf-finale-card').forEach(function(c) { c.classList.remove('on'); });
+}
+
+function wfAnimStep2() {
+  document.querySelectorAll('#wf-p-2 .wf-check').forEach(function(c, i) {
+    setTimeout(function() { c.classList.add('on'); }, 350 + i * 280);
+  });
+}
+
+function wfAnimStep4() {
+  document.querySelectorAll('#wf-p-4 .wf-lbl').forEach(function(l, i) {
+    setTimeout(function() { l.classList.add('on'); }, 400 + i * 520);
+  });
+}
+
+function wfAnimStep5() {
+  var doc = document.getElementById('wf-export-doc');
+  if (doc) setTimeout(function() { doc.classList.add('on'); }, 420);
+}
+
+function wfAnimStep6() {
+  document.querySelectorAll('.wf-finale-card').forEach(function(c, i) {
+    setTimeout(function() { c.classList.add('on'); }, 300 + i * 220);
+  });
+}
+
+function wfRunStepAnim(n) {
+  wfResetStepAnim();
+  if (n === 2) wfAnimStep2();
+  else if (n === 4) wfAnimStep4();
+  else if (n === 5) wfAnimStep5();
+  else if (n === 6) wfAnimStep6();
+}
+
+function wfSelect(n) {
+  if (n < 1 || n > WF_STEP_COUNT) return;
+  if (n === wfCurrent) return;
+
+  wfPauseVideos();
+  clearTimeout(wfAutoTimer);
+  wfAutoTimer = null;
+
+  var oldEl = wfCurrent ? document.getElementById(WF_MEDIA_IDS[wfCurrent - 1]) : null;
+  if (oldEl) oldEl.classList.remove('visible');
+
+  for (var i = 1; i <= WF_STEP_COUNT; i++) {
+    var btn = document.getElementById('wf-btn-' + i);
+    if (!btn) continue;
+    btn.classList.remove('active', 'passed');
+    if (i < n) btn.classList.add('passed');
+    if (i === n) btn.classList.add('active');
+  }
+
+  wfCurrent = n;
+
+  var frame = document.getElementById('wf-media-frame');
+  var copyCol = document.getElementById('wf-copy-col');
+  if (frame) frame.classList.toggle('finale', n === 6);
+  if (copyCol) copyCol.classList.toggle('finale', n === 6);
+
+  var prog = document.getElementById('wf-progress-fill');
+  if (prog) prog.style.width = (n / WF_STEP_COUNT * 100) + '%';
+
+  setTimeout(function() {
+    var newEl = document.getElementById(WF_MEDIA_IDS[n - 1]);
+    if (newEl) newEl.classList.add('visible');
+    if (n === 3) {
+      var vid = document.getElementById('wf-vid-3');
+      if (vid) { vid.currentTime = 0; vid.play().catch(function(){}); }
+    }
+    wfRunScan();
+    wfRunStepAnim(n);
+  }, 80);
+
+  var title = document.getElementById('wf-step-title');
+  var cap = document.getElementById('wf-caption');
+  if (title) {
+    title.style.opacity = '0';
+    setTimeout(function() {
+      title.textContent = WF_TITLES[n - 1];
+      title.style.opacity = '1';
+    }, 160);
+  }
+  if (cap) {
+    cap.style.opacity = '0';
+    setTimeout(function() {
+      cap.textContent = WF_CAPTIONS[n - 1];
+      cap.style.opacity = '1';
+    }, 180);
+  }
+
+  wfStartAuto(n);
+}
+
+function wfStartAuto(fromStep) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (current !== 'produkt') return;
+  clearTimeout(wfAutoTimer);
+  if (fromStep >= WF_STEP_COUNT) return;
+
+  var el = document.getElementById(WF_MEDIA_IDS[fromStep - 1]);
+  var dur = WF_DURATIONS[fromStep - 1];
+  if (el && el.tagName === 'VIDEO' && el.duration && !isNaN(el.duration)) {
+    dur = Math.min(Math.max(el.duration * 1000, 3500), 8000);
+  }
+
+  wfAutoTimer = setTimeout(function() {
+    wfSelect(fromStep + 1);
+  }, dur);
+}
+
+function startWfAnimation() {
+  wfStop();
+  wfCurrent = 0;
+  document.querySelectorAll('#screen-produkt .wf-placeholder, #screen-produkt video').forEach(function(el) {
+    el.classList.remove('visible');
+  });
+  for (var i = 1; i <= WF_STEP_COUNT; i++) {
+    var btn = document.getElementById('wf-btn-' + i);
+    if (btn) btn.classList.remove('active', 'passed');
+  }
+  var frame = document.getElementById('wf-media-frame');
+  var copyCol = document.getElementById('wf-copy-col');
+  if (frame) frame.classList.remove('finale');
+  if (copyCol) copyCol.classList.remove('finale');
+  var prog = document.getElementById('wf-progress-fill');
+  if (prog) prog.style.width = '0%';
+  wfResetStepAnim();
+  if (window.lucide) lucide.createIcons();
+  wfSelect(1);
+}
+
+function navigate(id) {
+  if (id === current || animating) return;
+  if (current === 'prinzip') ivStopLabelPulse();
+  if (current === 'fuerwen') fwStop();
+  if (current === 'produkt') wfStop();
+  animating = true;
+
+  const from = document.getElementById('screen-' + current);
+  const to   = document.getElementById('screen-' + id);
+
+  // Exit
+  from.classList.add('exit');
+  from.classList.remove('active');
+
+  // Reset & retrigger reveal animations on incoming screen
+  to.querySelectorAll('.reveal').forEach(el => {
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+  });
+
+  setTimeout(() => {
+    from.classList.remove('exit');
+    to.classList.add('active');
+    current = id;
+
+    // Update dock
+    document.querySelectorAll('.dock-item').forEach(d => d.classList.remove('active'));
+    const dockId = dockMap[id];
+    if (dockId) document.getElementById(dockId).classList.add('active');
+
+    // Dim demo CTA when on demo screen
+    document.getElementById('dock-cta-btn').classList.toggle('dim', id === 'demo');
+
+    // "Ihr Vorteil" beim Betreten auf Startzustand zurücksetzen
+    if (id === 'prinzip') ivReset();
+    if (id === 'fuerwen') setTimeout(fwInit, 340);
+    if (id === 'produkt') setTimeout(startWfAnimation, 360);
+
+    setTimeout(() => { animating = false; }, 80);
+  }, 320);
+}
+
+function goToDemo() { navigate('demo'); }
+
+// ================================================
+// FÜR WEN — KONSTELLATION
+// ================================================
+var fwScanTimer = null;
+var fwActiveId = 'schule';
+
+function fwStop() {
+  if (fwScanTimer) { clearTimeout(fwScanTimer); fwScanTimer = null; }
+}
+
+function fwShowLabels(card, instant) {
+  if (!card) return;
+  var lbls = card.querySelectorAll('.fw-lbl');
+  lbls.forEach(function(l, i) {
+    if (instant) {
+      l.classList.add('on');
+    } else {
+      setTimeout(function() { l.classList.add('on'); }, 520 + i * 320);
+    }
+  });
+  if (instant) card.classList.add('scanned');
+}
+
+function fwRunScan(card) {
+  if (!card || current !== 'fuerwen') return;
+  fwStop();
+  card.classList.remove('scanned');
+  card.querySelectorAll('.fw-lbl').forEach(function(l) { l.classList.remove('on'); });
+  var scan = card.querySelector('.fw-scan');
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    fwShowLabels(card, true);
+    return;
+  }
+  if (scan) {
+    scan.classList.remove('run');
+    void scan.offsetWidth;
+    scan.classList.add('run');
+  }
+  fwShowLabels(card, false);
+  setTimeout(function() { card.classList.add('scanned'); }, 520);
+  fwScanTimer = setTimeout(function() {
+    if (current === 'fuerwen' && card.classList.contains('active')) fwRunScan(card);
+  }, 4600);
+}
+
+function fwSelect(id) {
+  fwActiveId = id;
+  document.querySelectorAll('#screen-fuerwen .fw-card').forEach(function(c) {
+    var on = c.dataset.fw === id;
+    c.classList.toggle('active', on);
+    c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (!on) {
+      c.classList.remove('scanned');
+      c.querySelectorAll('.fw-lbl').forEach(function(l) { l.classList.remove('on'); });
+      var s = c.querySelector('.fw-scan');
+      if (s) s.classList.remove('run');
+    }
+  });
+  fwRunScan(document.querySelector('#screen-fuerwen .fw-card[data-fw="' + id + '"]'));
+}
+
+function fwInit() {
+  fwStop();
+  var cards = document.querySelectorAll('#screen-fuerwen .fw-card');
+  cards.forEach(function(c) {
+    c.classList.remove('fw-in', 'active', 'scanned');
+    c.setAttribute('aria-pressed', 'false');
+    c.querySelectorAll('.fw-lbl').forEach(function(l) { l.classList.remove('on'); });
+    var s = c.querySelector('.fw-scan');
+    if (s) s.classList.remove('run');
+  });
+  cards.forEach(function(c, i) {
+    setTimeout(function() { c.classList.add('fw-in'); }, 70 + i * 90);
+  });
+  setTimeout(function() { fwSelect(fwActiveId || 'schule'); }, 70 + cards.length * 90 + 120);
+}
+
+// ================================================
+// IHR VORTEIL — BEWERTUNG
+// ================================================
+var ivPulseTimer = null;
+var ivPulseStep = 0;
+
+function ivStopLabelPulse() {
+  if (ivPulseTimer) { clearTimeout(ivPulseTimer); ivPulseTimer = null; }
+  ivPulseStep = 0;
+  document.querySelectorAll('#screen-prinzip .iv-lbl').forEach(function(l){ l.classList.remove('iv-flash'); });
+}
+
+function ivStartLabelPulse() {
+  ivStopLabelPulse();
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var lbls = document.querySelectorAll('#screen-prinzip .iv-lbl.on');
+  if (!lbls.length) return;
+  function tick() {
+    lbls.forEach(function(l){ l.classList.remove('iv-flash'); });
+    var idx = ivPulseStep % lbls.length;
+    void lbls[idx].offsetWidth;
+    lbls[idx].classList.add('iv-flash');
+    ivPulseStep++;
+    ivPulseTimer = setTimeout(tick, 4800);
+  }
+  ivPulseTimer = setTimeout(tick, 2200);
+}
+
+function ivPlay() {
+  var wrap = document.getElementById('iv-wrap');
+  if (!wrap) return;
+  ivStopLabelPulse();
+  var scan = document.getElementById('iv-scan');
+  var lbls = document.querySelectorAll('#screen-prinzip .iv-lbl');
+  var benefits = document.querySelectorAll('#screen-prinzip .iv-benefit');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  benefits.forEach(function(b){ b.classList.remove('on'); });
+
+  if (reduce) {
+    wrap.classList.add('done');
+    lbls.forEach(function(l){ l.classList.add('on'); });
+    benefits.forEach(function(b){ b.classList.add('on'); });
+    return;
+  }
+
+  if (scan) { scan.style.animation = 'none'; void scan.offsetWidth; scan.style.animation = 'iv-scan 2s cubic-bezier(0.2,0,0,1) forwards'; }
+  setTimeout(function(){
+    wrap.classList.add('done');
+    lbls.forEach(function(l, i){
+      setTimeout(function(){ l.classList.add('on'); }, 400 + i * 700);
+    });
+    var benefitStart = 400 + lbls.length * 700 + 350;
+    benefits.forEach(function(b, i){
+      setTimeout(function(){ b.classList.add('on'); }, benefitStart + i * 180);
+    });
+    setTimeout(ivStartLabelPulse, 400 + (lbls.length - 1) * 700 + 900);
+  }, 1700);
+}
+
+function ivReset() {
+  ivStopLabelPulse();
+  var wrap = document.getElementById('iv-wrap');
+  if (!wrap) return;
+  var scan = document.getElementById('iv-scan');
+  wrap.classList.remove('done');
+  document.querySelectorAll('#screen-prinzip .iv-lbl').forEach(function(l){ l.classList.remove('on'); });
+  document.querySelectorAll('#screen-prinzip .iv-benefit').forEach(function(b){ b.classList.remove('on'); });
+  if (scan) { scan.style.animation = 'none'; }
+}
+
+// ================================================
+// FAQ CHAT (Gemini Style)
+// ================================================
+const FAQ_KB = {
+  'Für wen ist Caipex gedacht?': 'Caipex ist primär für Ingenieurbüros, Bewertungsdienstleister und Sachverständige, die regelmäßig Immobilienbewertungen durchführen. Jedes Teammitglied kann damit vollwertige Gutachten erstellen — unabhängig vom Vorwissen.',
+  'Wie verlässlich sind die Ergebnisse?': 'Caipex basiert auf über 1.000 eigenen, manuell durchgeführten Bewertungen. Die Methodik umfasst Vergleichs-, Ertrags- und Sachwertverfahren. Der Gutachter prüft und trägt die Verantwortung. Caipex stellt sicher, dass kein Schritt vergessen wird.',
+  'Brauche ich Vorkenntnisse?': 'Nein. Caipex führt Schritt für Schritt durch den Prozess — wie ein erfahrener Kollege, der neben dir sitzt. Grundlegendes Immobilienverständnis ist hilfreich, tiefes Gutachter-Fachwissen ist nicht erforderlich.',
+  'Wie ist das mit Datenschutz und DSGVO?': 'Caipex verarbeitet Daten ausschließlich auf deutschen Servern, vollständig DSGVO-konform. Objektdaten werden nicht für das Training von KI-Modellen verwendet. Deine Daten bleiben deine Daten.',
+  'Gibt es eine kostenlose Testphase?': 'Ja. Wir starten mit einem geführten Pilot — gemeinsam mit deinem Team, an echten Objekten. So sehen wir, ob Caipex zu deinem Workflow passt, bevor du irgendeine Entscheidung triffst.',
+  'Was passiert nach der Demo-Anfrage?': 'Wir melden uns innerhalb von 24 Stunden. Dann: 30-minütiges Gespräch um deinen Workflow zu verstehen → Live-Demo an einem echten Objekt → Pilot starten wenn es passt. Kein Druck, kein Vertriebsfunnel.',
+  'Wie schnell ist eine Bewertung fertig?': 'Eine vollständige Bewertung, für die bisher ein Arbeitstag nötig war, lässt sich mit Caipex in einem Bruchteil der Zeit abschließen — ohne Qualitätsverlust.',
+  'Welche Bewertungsverfahren werden unterstützt?': 'Caipex unterstützt Vergleichswertverfahren, Ertragswertverfahren und Sachwertverfahren. Das System schlägt je nach Objekttyp das passende Verfahren vor.',
+  'Kann ich Caipex in mein Team integrieren?': 'Ja. Caipex ist auf Teams ausgelegt — mit gemeinsamen Projekten, Aufgabenverteilung und einer einheitlichen Datenbasis. Details besprechen wir gerne in einem persönlichen Gespräch.',
+  'Was kostet Caipex?': null, // triggers "persönliches Gespräch"
+};
+
+function faqNormalize(q) {
+  return q.trim().replace(/\?$/, '').toLowerCase();
+}
+
+function faqFindAnswer(question) {
+  const norm = faqNormalize(question);
+  for (const [key, val] of Object.entries(FAQ_KB)) {
+    if (faqNormalize(key) === norm) return val; // val kann null sein → löst "persönliches Gespräch" aus
+  }
+  // fuzzy: check if question contains key words
+  for (const [key, val] of Object.entries(FAQ_KB)) {
+    const words = faqNormalize(key).split(' ').filter(w => w.length > 4);
+    const matches = words.filter(w => norm.includes(w));
+    if (matches.length >= 2) return val;
+  }
+  return undefined; // unbekannte Frage → ebenfalls "persönliches Gespräch"
+}
+
+let faqTyping = false;
+
+function faqAsk(question) {
+  if (faqTyping) return;
+
+  const welcome = document.getElementById('faq-welcome');
+  if (welcome) welcome.style.display = 'none';
+
+  const chat = document.getElementById('faq-chat');
+  const wrap = document.createElement('div');
+  wrap.className = 'faq-msg-wrap';
+
+  // User bubble
+  const qBubble = document.createElement('div');
+  qBubble.className = 'faq-bubble-q';
+  qBubble.textContent = question;
+  wrap.appendChild(qBubble);
+
+  // Answer bubble placeholder
+  const aBubble = document.createElement('div');
+  aBubble.className = 'faq-bubble-a';
+  wrap.appendChild(aBubble);
+  chat.appendChild(wrap);
+  chat.scrollTop = chat.scrollHeight;
+
+  const answer = faqFindAnswer(question);
+
+  if (answer) {
+    faqTypewriter(aBubble, answer, chat);
+  } else {
+    const msg = 'Diese Frage beantworten wir gerne in einem persönlichen Gespräch.';
+    faqTypewriter(aBubble, msg, chat, function() {
+      const br = document.createElement('br');
+      aBubble.appendChild(br);
+      const btn = document.createElement('a');
+      btn.className = 'faq-mail-btn';
+      btn.href = faqMailtoLink(question);
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Per Mail anfragen';
+      aBubble.appendChild(btn);
+      chat.scrollTop = chat.scrollHeight;
+    });
+  }
+}
+
+function faqTypewriter(el, text, chat, onDone) {
+  faqTyping = true;
+  let i = 0;
+  function tick() {
+    if (i < text.length) {
+      el.appendChild(document.createTextNode(text[i]));
+      i++;
+      chat.scrollTop = chat.scrollHeight;
+      setTimeout(tick, 16);
+    } else {
+      faqTyping = false;
+      if (onDone) onDone();
+    }
+  }
+  tick();
+}
+
+function faqMailtoLink(question) {
+  const subject = encodeURIComponent('Frage an das CAIPEX Team');
+  const body = encodeURIComponent('Sehr geehrtes CAIPEX Team,\n\nnachfolgende Frage hätte ich gerne beantwortet:\n\n' + question + '\n\nMit freundlichen Grüßen');
+  return 'mailto:info@caipex.de?subject=' + subject + '&body=' + body;
+}
+
+function faqSubmit() {
+  const input = document.getElementById('faq-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  faqAsk(q);
+}
+
+
+// ================================================
+// MAGNETIC BUTTONS
+// ================================================
+function initMagnetic() {
+  document.querySelectorAll('.btn, .dock-cta').forEach(btn => {
+    const MAX = 4, STR = 0.55;
+    btn.addEventListener('mousemove', e => {
+      const r  = btn.getBoundingClientRect();
+      const nx = (e.clientX - (r.left + r.width  / 2)) / Math.max(r.width  / 2, 1);
+      const ny = (e.clientY - (r.top  + r.height / 2)) / Math.max(r.height / 2, 1);
+      btn.style.transform = `translate(${Math.round(nx*MAX*STR)}px,${Math.round(ny*MAX*STR)}px)`;
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transition = 'transform 0.3s cubic-bezier(0.2,0,0,1), opacity 0.18s cubic-bezier(0.2,0,0,1)';
+      btn.style.transform = 'translate(0,0)';
+      setTimeout(() => { btn.style.transition = ''; }, 320);
+    });
+  });
+}
+
+// ================================================
+// INTENT PILL
+// ================================================
+function showPill(text) {
+  const dim  = document.getElementById('pill-dim');
+  const pill = document.getElementById('pill');
+  pill.textContent = text;
+  dim.style.pointerEvents = 'all';
+  dim.style.background = 'rgba(26,25,22,0.55)';
+  setTimeout(() => {
+    pill.style.opacity = '1';
+    pill.style.transform = 'scale(1)';
+  }, 80);
+  setTimeout(() => {
+    pill.style.opacity = '0';
+    pill.style.transform = 'scale(0.75)';
+    dim.style.background = 'rgba(26,25,22,0)';
+    setTimeout(() => { dim.style.pointerEvents = 'none'; }, 400);
+  }, 2400);
+}
+
+// ================================================
+// FORM
+// ================================================
+function submitForm(e) {
+  e.preventDefault();
+  var consent = document.getElementById('privacy-consent');
+  if (!consent || !consent.checked) {
+    showPill('Bitte Datenschutz-Hinweis bestätigen.');
+    return;
+  }
+  showPill('Anfrage gesendet — wir melden uns bald.');
+  e.target.reset();
+}
+
+// ================================================
+// HOUSE SCAN ANIMATION — loop with 3s pause
+// ================================================
+function initHouseScan() {
+  var scan = document.getElementById('scan');
+  var seq  = [['l-dach',770],['l-fenster',1650],['l-fassade',2420],['l-heizung',3190]];
+  var labelTimers = [];
+  var loopTimer   = null;
+
+  function resetScan() {
+    labelTimers.forEach(clearTimeout); labelTimers = [];
+    seq.forEach(function(s){ document.getElementById(s[0]).classList.remove('on'); });
+    scan.classList.remove('run'); void scan.getBBox();
+  }
+
+  function runScan() {
+    resetScan();
+    scan.classList.add('run');
+    seq.forEach(function(s){
+      labelTimers.push(setTimeout(function(){ document.getElementById(s[0]).classList.add('on'); }, s[1]));
+    });
+    // animation 3.74s + 3s pause → repeat
+    loopTimer = setTimeout(runScan, 3740 + 3000);
+  }
+
+  setTimeout(runScan, 600);
+}
+
+// ================================================
+// INIT
+// ================================================
+// ================================================
+// DOCK — alle Items gleich breit (orientiert am breitesten)
+// ================================================
+function equalizeDock() {
+  const items = document.querySelectorAll('#dock .dock-item');
+  let max = 0;
+  items.forEach(i => { i.style.width = 'auto'; });
+  items.forEach(i => { max = Math.max(max, i.offsetWidth); });
+  items.forEach(i => { i.style.width = max + 'px'; });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  initMagnetic();
+  initHouseScan();
+  equalizeDock();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(equalizeDock);
+  window.addEventListener('resize', equalizeDock);
+});
+</script>
+</body>
+</html>
